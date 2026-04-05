@@ -11,7 +11,8 @@ export const DEFAULT_PRESETS = [
     cutoff: 8000,
     resonance: 1,
     volume: -6,
-    lfo: { enabled: false, rate: 2, depth: 1000, waveform: "sine" },
+    lfo1: { enabled: false, rate: 2,   depth: 1000, waveform: "sine",     target: "filterCutoff" },
+    lfo2: { enabled: false, rate: 0.5, depth: 3,    waveform: "sine",     target: "masterVolume" },
   },
   {
     id: "bass",
@@ -23,7 +24,8 @@ export const DEFAULT_PRESETS = [
     cutoff: 600,
     resonance: 8,
     volume: -4,
-    lfo: { enabled: false, rate: 0.5, depth: 200, waveform: "sine" },
+    lfo1: { enabled: false, rate: 0.5, depth: 200,  waveform: "sine",     target: "filterCutoff" },
+    lfo2: { enabled: false, rate: 2,   depth: 0.2,  waveform: "sine",     target: "reverbWet"    },
   },
   {
     id: "lead",
@@ -35,7 +37,8 @@ export const DEFAULT_PRESETS = [
     cutoff: 5000,
     resonance: 4,
     volume: -8,
-    lfo: { enabled: true, rate: 5, depth: 800, waveform: "sine" },
+    lfo1: { enabled: true,  rate: 5,   depth: 800,  waveform: "sine",     target: "filterCutoff"    },
+    lfo2: { enabled: false, rate: 3,   depth: 0.15, waveform: "triangle", target: "delayWet"        },
   },
   {
     id: "pad",
@@ -47,7 +50,8 @@ export const DEFAULT_PRESETS = [
     cutoff: 3000,
     resonance: 2,
     volume: -10,
-    lfo: { enabled: true, rate: 0.3, depth: 500, waveform: "triangle" },
+    lfo1: { enabled: true,  rate: 0.3, depth: 500,  waveform: "triangle", target: "filterCutoff" },
+    lfo2: { enabled: true,  rate: 0.2, depth: 2,    waveform: "sine",     target: "masterVolume" },
   },
   {
     id: "pluck",
@@ -59,7 +63,8 @@ export const DEFAULT_PRESETS = [
     cutoff: 12000,
     resonance: 3,
     volume: -6,
-    lfo: { enabled: false, rate: 4, depth: 300, waveform: "sine" },
+    lfo1: { enabled: false, rate: 4,   depth: 300,  waveform: "sine",     target: "filterCutoff" },
+    lfo2: { enabled: false, rate: 1,   depth: 0.1,  waveform: "sine",     target: "reverbWet"    },
   },
 ];
 

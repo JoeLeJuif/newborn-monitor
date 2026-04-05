@@ -71,3 +71,25 @@
   color: #fff;
   font-weight: 600;
 }
+
+/* Target selector */
+.lfo-target-select {
+  flex: 1;
+  padding: 3px 6px;
+  border: 1px solid var(--btn-border);
+  border-bottom: 2px solid var(--btn-border-b);
+  border-radius: 4px;
+  background: var(--btn-bg);
+  color: var(--btn-color);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: auto;
+  transition: border-color 0.1s;
+}
+
+.lfo-target-select:hover,
+.lfo-target-select:focus {
+  border-bottom-color: var(--accent);
+  outline: none;
+}

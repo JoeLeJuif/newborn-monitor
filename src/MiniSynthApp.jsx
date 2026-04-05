@@ -9,7 +9,8 @@ import MidiPanel from "./components/MidiPanel";
 import {
   startAudio, triggerAttack, triggerRelease, releaseAll,
   setEnvelope, setFilterCutoff, setFilterResonance, setMasterVolume,
-  setLFORate, setLFODepth, setLFOWaveform, setLFOEnabled,
+  setLFO1Rate, setLFO1Depth, setLFO1Waveform, setLFO1Target, setLFO1Enabled,
+  setLFO2Rate, setLFO2Depth, setLFO2Waveform, setLFO2Target, setLFO2Enabled,
   setDelayWet, setDelayFeedback, setDelayTime, setReverbWet, setReverbRoom,
   setOsc1Waveform, setOsc1Level,
   setOsc2Enabled, setOsc2Waveform, setOsc2Level, setOsc2Detune,
@@ -18,7 +19,8 @@ import { initMidi, selectInput, disconnectMidi } from "./audio/midi";
 import { KEY_TO_NOTE, OCTAVE_DOWN_KEY, OCTAVE_UP_KEY } from "./audio/keyMap";
 
 const DEFAULT_ENVELOPE = { attack: 0.02, decay: 0.1, sustain: 0.7, release: 0.5 };
-const DEFAULT_LFO      = { enabled: false, rate: 2, depth: 1000, waveform: "sine" };
+const DEFAULT_LFO1     = { enabled: false, rate: 2,   depth: 1000, waveform: "sine",     target: "filterCutoff" };
+const DEFAULT_LFO2     = { enabled: false, rate: 0.5, depth: 3,    waveform: "sine",     target: "masterVolume" };
 const DEFAULT_EFFECTS  = {
   delay:  { enabled: false, wet: 0.3, feedback: 0.3, time: 0.25 },
   reverb: { enabled: false, wet: 0.4, room: 0.7 },
@@ -37,24 +39,25 @@ export default function MiniSynthApp() {
   const [cutoff, setCutoff]           = useState(8000);
   const [resonance, setResonance]     = useState(1);
   const [volume, setVolume]           = useState(-6);
-  const [lfo, setLfoState]            = useState(DEFAULT_LFO);
+  const [lfo1, setLfo1State]          = useState(DEFAULT_LFO1);
+  const [lfo2, setLfo2State]          = useState(DEFAULT_LFO2);
   const [effects, setEffectsState]    = useState(DEFAULT_EFFECTS);
 
   const [midiInfo, setMidiInfo] = useState({
     supported: null, granted: false, inputs: [], selectedId: "", lastNote: null,
   });
 
-  // FIX #2: mirrors octave state — readable in stable keyboard callbacks without
-  //         adding `octave` to the effect dependency array.
+  // mirrors octave state — readable in stable keyboard callbacks without
+  // adding `octave` to the effect dependency array.
   const octaveRef = useRef(4);
 
-  // FIX #2: stores the exact note string played per key so keyup always
-  //         releases the correct note even if octave changed in between.
+  // stores the exact note string played per key so keyup always
+  // releases the correct note even if octave changed in between.
   const heldKeyNotes = useRef(new Map()); // key → note string
 
-  // FIX #3: reference count per note across all sources (keyboard, mouse, MIDI).
-  //         triggerAttack fires only when count goes 0→1;
-  //         triggerRelease fires only when count goes 1→0.
+  // reference count per note across all sources (keyboard, mouse, MIDI).
+  // triggerAttack fires only when count goes 0→1;
+  // triggerRelease fires only when count goes 1→0.
   const noteCountRef = useRef(new Map()); // note → number
 
   const audioStarted = useRef(false);
@@ -84,7 +87,7 @@ export default function MiniSynthApp() {
     }
   }, []);
 
-  // FIX #2: keyboard effect no longer depends on `octave` — uses octaveRef instead.
+  // keyboard effect no longer depends on `octave` — uses octaveRef instead.
   useEffect(() => {
     const down = async (e) => {
       if (e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
@@ -136,7 +139,7 @@ export default function MiniSynthApp() {
           noteCountRef.current.set(note, count);
         }
       },
-      // FIX #4: release all held MIDI notes when active device disconnects.
+      // release all held MIDI notes when active device disconnects.
       onDisconnect: () => {
         releaseAll();
         noteCountRef.current.clear();
@@ -170,10 +173,22 @@ export default function MiniSynthApp() {
   const handleResonanceChange = (q)   => { setResonance(q); setFilterResonance(q); };
   const handleVolumeChange    = (db)  => { setVolume(db); setMasterVolume(db); };
 
-  const handleLFOChange = (lfo) => {
-    setLfoState(lfo);
-    setLFORate(lfo.rate); setLFODepth(lfo.depth);
-    setLFOWaveform(lfo.waveform); setLFOEnabled(lfo.enabled);
+  const handleLFO1Change = (lfo) => {
+    setLfo1State(lfo);
+    setLFO1Rate(lfo.rate);
+    setLFO1Waveform(lfo.waveform);
+    setLFO1Target(lfo.target);
+    setLFO1Depth(lfo.depth);
+    setLFO1Enabled(lfo.enabled);
+  };
+
+  const handleLFO2Change = (lfo) => {
+    setLfo2State(lfo);
+    setLFO2Rate(lfo.rate);
+    setLFO2Waveform(lfo.waveform);
+    setLFO2Target(lfo.target);
+    setLFO2Depth(lfo.depth);
+    setLFO2Enabled(lfo.enabled);
   };
 
   const handleEffectsChange = (fx) => {
@@ -188,6 +203,7 @@ export default function MiniSynthApp() {
     releaseAll();
     noteCountRef.current.clear();
     setActiveNotes(new Set());
+
     const loadedOsc1 = preset.osc1 ?? { waveform: preset.waveform ?? "sawtooth", level: 1 };
     const loadedOsc2 = preset.osc2 ?? DEFAULT_OSC2;
     handleOscChange({ osc1: loadedOsc1, osc2: loadedOsc2 });
@@ -195,13 +211,21 @@ export default function MiniSynthApp() {
     handleCutoffChange(preset.cutoff);
     handleResonanceChange(preset.resonance);
     handleVolumeChange(preset.volume);
-    handleLFOChange({ waveform: "sine", ...preset.lfo });
+
+    // Backward compat: old presets have a single `lfo` field
+    const loadedLfo1 = preset.lfo1 ?? (preset.lfo
+      ? { ...DEFAULT_LFO1, ...preset.lfo, target: "filterCutoff" }
+      : DEFAULT_LFO1);
+    const loadedLfo2 = preset.lfo2 ?? DEFAULT_LFO2;
+    handleLFO1Change({ waveform: "sine", ...loadedLfo1 });
+    handleLFO2Change({ waveform: "sine", ...loadedLfo2 });
   };
 
   const currentState = {
     waveform: osc1.waveform,
     osc1, osc2,
-    envelope, cutoff, resonance, volume, lfo,
+    envelope, cutoff, resonance, volume,
+    lfo1, lfo2,
   };
 
   return (
@@ -252,7 +276,10 @@ export default function MiniSynthApp() {
             <span className="zone-label">Modulation · Effects · Utility</span>
           </div>
           <div className="controls">
-            <LFOControls lfo={lfo} onChange={handleLFOChange} />
+            <LFOControls
+              lfo1={lfo1} lfo2={lfo2}
+              onChange1={handleLFO1Change} onChange2={handleLFO2Change}
+            />
             <EffectsControls effects={effects} onChange={handleEffectsChange} />
             <PresetPanel currentState={currentState} onLoad={loadPreset} />
             <MidiPanel midi={midiInfo} onSelectInput={handleMidiInputSelect} />
