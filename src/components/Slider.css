@@ -1,0 +1,72 @@
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.slider-label {
+  width: 68px;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  letter-spacing: 0.01em;
+}
+
+/* Track */
+.slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.slider:hover {
+  background: var(--border-bright);
+}
+
+/* Thumb — white with colored border (pro audio style) */
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--accent);
+  box-shadow:
+    0 1px 3px rgba(52, 116, 186, 0.30),
+    0 1px 2px rgba(30, 48, 72, 0.12);
+  cursor: pointer;
+  transition: border-color 0.1s, transform 0.1s;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  border-color: var(--accent-hover);
+  transform: scale(1.15);
+}
+
+.slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 3px rgba(52, 116, 186, 0.25);
+  cursor: pointer;
+}
+
+.slider-value {
+  width: 52px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}

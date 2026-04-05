@@ -1,0 +1,57 @@
+:root {
+  /* ── Backgrounds ── */
+  --bg:          #edf1f7;   /* outer canvas — perle bleutée */
+  --surface:     #ffffff;   /* panneaux principaux */
+  --surface-alt: #f5f8fc;   /* zones légèrement différenciées */
+
+  /* ── Borders ── */
+  --border:        #ccd4e2;
+  --border-bright: #9ab0c8;
+  --border-deep:   #a0b2c8; /* used for button bottom edge 3-D */
+
+  /* ── Text ── */
+  --text:       #1e3048;
+  --text-muted: #7286a0;
+  --text-dim:   #a0b0c4;   /* very secondary — hints, axis labels */
+
+  /* ── Blue accent ── */
+  --accent:       #3474ba;
+  --accent-dark:  #1e58a0;
+  --accent-hover: #4e90d4;
+  --accent-glow:  rgba(52, 116, 186, 0.15);
+  --accent-bg:    rgba(52, 116, 186, 0.08);
+
+  /* ── Silver / pearl — inactive controls ── */
+  --silver:        #6478900;  /* not used directly — see below */
+  --btn-bg:        linear-gradient(180deg, #f4f7fc 0%, #e8edf5 100%);
+  --btn-bg-hover:  linear-gradient(180deg, #f8fbff 0%, #edf2fa 100%);
+  --btn-border:    #c0ccdc;
+  --btn-border-b:  #9aaec4;  /* darker bottom = subtle 3-D */
+  --btn-color:     #607090;
+
+  /* ── Typography ── */
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+/* Plugin window centering on wide screens */
+#root {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  background: var(--bg);
+}
+
+h1, h2, h3 { margin: 0; font-weight: 600; }
+button { font-family: inherit; }

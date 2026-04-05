@@ -1,0 +1,94 @@
+.piano-wrapper {
+  overflow-x: auto;
+  padding: 16px 0 18px;
+  background: linear-gradient(180deg, #f0f4f8 0%, #eaeff6 100%);
+  border-bottom: 1px solid var(--border);
+}
+
+.piano-keyboard {
+  display: flex;
+  position: relative;
+  height: 148px;
+  width: max-content;
+  margin: 0 auto;
+  user-select: none;
+  /* slight drop shadow for "floating" instrument look */
+  filter: drop-shadow(0 4px 12px rgba(30, 48, 72, 0.15));
+}
+
+/* ── White keys ── */
+.key--white {
+  position: relative;
+  width: 44px;
+  height: 148px;
+  background: linear-gradient(180deg,
+    #ffffff       0%,
+    #fafcff      50%,
+    #f0f4fa      85%,
+    #e4ecf6     100%);
+  border: 1px solid #b0c0d4;
+  border-top: none;
+  border-bottom: 3px solid #8fa8c4;  /* depth edge */
+  border-radius: 0 0 6px 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 6px;
+  z-index: 1;
+  transition: background 0.05s;
+}
+
+.key--white:hover {
+  background: linear-gradient(180deg, #eef5ff 0%, #e4effc 100%);
+}
+
+.key--white.key--active {
+  background: linear-gradient(180deg,
+    var(--accent-hover) 0%,
+    var(--accent)       100%);
+  border-color: var(--accent-dark);
+  border-bottom-color: var(--accent-dark);
+}
+
+/* ── Black keys ── */
+.key--black {
+  position: relative;
+  width: 28px;
+  height: 92px;
+  background: linear-gradient(180deg,
+    #344870  0%,
+    #243458  45%,
+    #1a2848  80%,
+    #121e38 100%);
+  border: 1px solid #0e1828;
+  border-top: none;
+  border-bottom: 2px solid #0a1020;
+  border-radius: 0 0 5px 5px;
+  cursor: pointer;
+  z-index: 2;
+  margin-left: -14px;
+  margin-right: -14px;
+  transition: background 0.05s;
+  box-shadow:
+    2px 4px 8px rgba(10, 18, 40, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.key--black:hover {
+  background: linear-gradient(180deg, #4a608c 0%, #344870 100%);
+}
+
+.key--black.key--active {
+  background: linear-gradient(180deg,
+    var(--accent)      0%,
+    var(--accent-dark) 100%);
+}
+
+.key-label {
+  font-size: 8px;
+  color: #8098b4;
+  pointer-events: none;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}

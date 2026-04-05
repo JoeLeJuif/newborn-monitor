@@ -1,0 +1,232 @@
+/* ── Password gate ─────────────────────────────────────────── */
+.gate {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.gate-box {
+  width: 320px;
+  padding: 36px 32px 32px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(30, 48, 72, 0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.gate-title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0;
+}
+
+.gate-subtitle {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 20px;
+}
+
+.gate-form {
+  width: 100%;
+  display: flex;
+  gap: 6px;
+}
+
+.gate-input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.12s;
+}
+
+.gate-input:focus {
+  border-color: var(--accent);
+}
+
+.gate-input--error {
+  border-color: #d04055;
+  background: #fff5f6;
+}
+
+.gate-btn {
+  padding: 7px 16px;
+  background: linear-gradient(180deg, var(--accent-hover) 0%, var(--accent) 100%);
+  border: 1px solid var(--accent-dark);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s;
+}
+
+.gate-btn:hover {
+  background: linear-gradient(180deg, #68a8f0 0%, var(--accent-hover) 100%);
+}
+
+.gate-error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #c03040;
+}
+
+/* ── Plugin window ─────────────────────────────────────────── */
+.app {
+  width: 100%;
+  max-width: 1280px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left:  1px solid var(--border);
+  border-right: 1px solid var(--border);
+  box-shadow: 0 0 40px rgba(30, 48, 72, 0.10);
+}
+
+/* ── Header ────────────────────────────────────────────────── */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 52px;
+  background: linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%);
+  border-bottom: 2px solid var(--border);
+  flex-shrink: 0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.header-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.app-title {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0;
+}
+
+.app-subtitle {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Status chips in header */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-alt);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--btn-color);
+  letter-spacing: 0.02em;
+}
+
+.status-chip--note {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  min-width: 44px;
+  justify-content: center;
+}
+
+.status-chip--midi {
+  gap: 5px;
+}
+
+.status-chip--midi.is-active {
+  color: #2a9a60;
+  border-color: #80c8a0;
+  background: rgba(42, 154, 96, 0.08);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--btn-border);
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.status-chip--midi.is-active .status-dot {
+  background: #2a9a60;
+}
+
+.header-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  padding-left: 4px;
+}
+
+/* ── Main layout ────────────────────────────────────────────── */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Zones — named functional sections ──────────────────────── */
+.zone {
+  border-bottom: 1px solid var(--border);
+}
+
+.zone-header {
+  padding: 5px 12px;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zone-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
