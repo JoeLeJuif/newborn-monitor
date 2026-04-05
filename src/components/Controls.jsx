@@ -1,11 +1,11 @@
-import WaveSelector from "./WaveSelector";
+import OscillatorControls from "./OscillatorControls";
 import EnvelopeControls from "./EnvelopeControls";
 import FilterControls from "./FilterControls";
 import "./Slider.css";
 import "./Controls.css";
 
 export default function Controls({
-  waveform, onWaveformChange,
+  osc1, osc2, onOscChange,
   envelope, onEnvelopeChange,
   cutoff, onCutoffChange,
   resonance, onResonanceChange,
@@ -13,7 +13,7 @@ export default function Controls({
 }) {
   return (
     <div className="controls">
-      <WaveSelector value={waveform} onChange={onWaveformChange} />
+      <OscillatorControls osc1={osc1} osc2={osc2} onChange={onOscChange} />
       <EnvelopeControls envelope={envelope} onChange={onEnvelopeChange} />
       <FilterControls
         cutoff={cutoff}

@@ -8,9 +8,11 @@ import StepSequencer from "./components/StepSequencer";
 import MidiPanel from "./components/MidiPanel";
 import {
   startAudio, triggerAttack, triggerRelease, releaseAll,
-  setWaveform, setEnvelope, setFilterCutoff, setFilterResonance, setMasterVolume,
+  setEnvelope, setFilterCutoff, setFilterResonance, setMasterVolume,
   setLFORate, setLFODepth, setLFOWaveform, setLFOEnabled,
   setDelayWet, setDelayFeedback, setDelayTime, setReverbWet, setReverbRoom,
+  setOsc1Waveform, setOsc1Level,
+  setOsc2Enabled, setOsc2Waveform, setOsc2Level, setOsc2Detune,
 } from "./audio/synthEngine";
 import { initMidi, selectInput, disconnectMidi } from "./audio/midi";
 import { KEY_TO_NOTE, OCTAVE_DOWN_KEY, OCTAVE_UP_KEY } from "./audio/keyMap";
@@ -22,6 +24,8 @@ const DEFAULT_EFFECTS  = {
   delay:  { enabled: false, wet: 0.3, feedback: 0.3, time: 0.25 },
   reverb: { enabled: false, wet: 0.4, room: 0.7 },
 };
+const DEFAULT_OSC1 = { waveform: "sawtooth", level: 1 };
+const DEFAULT_OSC2 = { enabled: false, waveform: "sawtooth", level: 0.7, detune: 0 };
 
 export default function App() {
   /* ── Password gate ─────────────────────────────────────────── */
@@ -70,7 +74,8 @@ export default function App() {
   const [activeNotes, setActiveNotes] = useState(new Set());
   const [lastNote, setLastNote]       = useState(null);
 
-  const [waveform, setWaveformState]  = useState("sawtooth");
+  const [osc1, setOsc1State]          = useState(DEFAULT_OSC1);
+  const [osc2, setOsc2State]          = useState(DEFAULT_OSC2);
   const [envelope, setEnvelopeState]  = useState(DEFAULT_ENVELOPE);
   const [cutoff, setCutoff]           = useState(8000);
   const [resonance, setResonance]     = useState(1);
@@ -154,7 +159,12 @@ export default function App() {
     setMidiInfo((prev) => ({ ...prev, selectedId: id }));
   };
 
-  const handleWaveformChange  = (w)   => { setWaveformState(w); setWaveform(w); };
+  const handleOscChange = ({ osc1: o1, osc2: o2 }) => {
+    setOsc1State(o1); setOsc2State(o2);
+    setOsc1Waveform(o1.waveform); setOsc1Level(o1.level);
+    setOsc2Waveform(o2.waveform); setOsc2Level(o2.level);
+    setOsc2Detune(o2.detune);     setOsc2Enabled(o2.enabled);
+  };
   const handleEnvelopeChange  = (env) => { setEnvelopeState(env); setEnvelope(env); };
   const handleCutoffChange    = (f)   => { setCutoff(f); setFilterCutoff(f); };
   const handleResonanceChange = (q)   => { setResonance(q); setFilterResonance(q); };
@@ -176,7 +186,9 @@ export default function App() {
 
   const loadPreset = (preset) => {
     releaseAll(); setActiveNotes(new Set());
-    handleWaveformChange(preset.waveform);
+    const loadedOsc1 = preset.osc1 ?? { waveform: preset.waveform ?? "sawtooth", level: 1 };
+    const loadedOsc2 = preset.osc2 ?? DEFAULT_OSC2;
+    handleOscChange({ osc1: loadedOsc1, osc2: loadedOsc2 });
     handleEnvelopeChange(preset.envelope);
     handleCutoffChange(preset.cutoff);
     handleResonanceChange(preset.resonance);
@@ -184,7 +196,11 @@ export default function App() {
     handleLFOChange({ waveform: "sine", ...preset.lfo });
   };
 
-  const currentState = { waveform, envelope, cutoff, resonance, volume, lfo };
+  const currentState = {
+    waveform: osc1.waveform, // kept for backward compat with old saved presets
+    osc1, osc2,
+    envelope, cutoff, resonance, volume, lfo,
+  };
 
   return (
     <div className="app">
@@ -220,7 +236,7 @@ export default function App() {
             <span className="zone-label">Synthesizer</span>
           </div>
           <Controls
-            waveform={waveform}   onWaveformChange={handleWaveformChange}
+            osc1={osc1} osc2={osc2} onOscChange={handleOscChange}
             envelope={envelope}   onEnvelopeChange={handleEnvelopeChange}
             cutoff={cutoff}       onCutoffChange={handleCutoffChange}
             resonance={resonance} onResonanceChange={handleResonanceChange}
