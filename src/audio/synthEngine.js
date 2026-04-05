@@ -33,13 +33,20 @@ const synth2 = new Tone.PolySynth(Tone.Synth, {
 }).connect(osc2Vol);
 
 // ─── LFO ──────────────────────────────────────────────────────────────────
-const lfo = new Tone.LFO({ type: "sine", frequency: 2, min: -1000, max: 1000 });
+// The LFO is always connected to filter.frequency and always running after
+// startAudio(). Enable/disable is done by setting min/max to ±depth or 0/0.
+// This avoids the dynamic connect/disconnect pattern, which fails silently in
+// Tone.js v14 when called without a specific destination argument.
+const lfo = new Tone.LFO({ type: "sine", frequency: 2, min: 0, max: 0 })
+  .connect(filter.frequency);
+
 let lfoActive   = false;
+let lfoDepth    = 1000; // stored user value — applied only when LFO is enabled
+let lfoStarted  = false;
 let osc2Enabled = false;
-let osc2Level   = 0.7; // stored so enable/disable can restore it
+let osc2Level   = 0.7;
 
 // Tracks the user-set cutoff independently of any LFO modulation.
-// Reapplied when LFO is disabled to guarantee a clean filter state.
 let baseCutoff = 8000;
 
 function gainToDb(gain) {
@@ -50,6 +57,11 @@ function gainToDb(gain) {
 
 export async function startAudio() {
   await Tone.start();
+  // Start LFO once — it runs indefinitely but outputs 0 until enabled.
+  if (!lfoStarted) {
+    lfo.start();
+    lfoStarted = true;
+  }
 }
 
 export function triggerAttack(note, velocity = 1) {
@@ -135,8 +147,12 @@ export function setLFORate(hz) {
 }
 
 export function setLFODepth(depth) {
-  lfo.min = -depth;
-  lfo.max = depth;
+  lfoDepth = depth;
+  // Only apply range if LFO is currently active.
+  if (lfoActive) {
+    lfo.min = -depth;
+    lfo.max =  depth;
+  }
 }
 
 export function setLFOWaveform(type) {
@@ -144,16 +160,15 @@ export function setLFOWaveform(type) {
 }
 
 export function setLFOEnabled(enabled) {
-  if (enabled === lfoActive) return;
   lfoActive = enabled;
   if (enabled) {
-    lfo.connect(filter.frequency);
-    lfo.start();
+    // Apply stored depth and let the LFO modulate.
+    lfo.min = -lfoDepth;
+    lfo.max =  lfoDepth;
   } else {
-    lfo.stop();
-    lfo.disconnect();
-    // Reapply base cutoff explicitly — prevents any residual LFO value
-    // from leaving the filter frozen at a near-zero frequency (silence).
+    // Silence the LFO by zeroing its range, then restore the exact base cutoff.
+    lfo.min = 0;
+    lfo.max = 0;
     filter.frequency.value = baseCutoff;
   }
 }
