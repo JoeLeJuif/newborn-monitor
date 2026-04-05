@@ -1,15 +1,15 @@
+/* OSC section spans full grid row */
 .osc-section {
-  /* inherits .section styles */
+  grid-column: 1 / -1;
 }
 
 .osc-cols {
-  display: flex;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
 }
 
 .osc-col {
-  flex: 1;
-  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -30,15 +30,14 @@
 
 .osc-waves {
   display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
+  gap: 4px;
 }
 
 .osc-waves .ctrl-btn {
   flex: 1;
-  min-width: 0;
-  padding: 4px 6px;
-  font-size: 10px;
+  padding: 5px 4px;
+  font-size: 11px;
+  text-align: center;
 }
 
 /* ON/OFF toggle for OSC 2 */
