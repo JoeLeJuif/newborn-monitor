@@ -11,15 +11,15 @@ export function midiNoteToName(midiNote) {
 
 let midiAccess  = null;
 let activeInput = null;
-let cbs = { onNoteOn: null, onNoteOff: null, onDeviceChange: null };
+let cbs = { onNoteOn: null, onNoteOff: null, onDeviceChange: null, onDisconnect: null };
 
 /**
  * Request MIDI access and register callbacks.
  * Returns { supported, granted, inputs }.
  * Safe to call even if Web MIDI is unavailable — never throws.
  */
-export async function initMidi({ onNoteOn, onNoteOff, onDeviceChange }) {
-  cbs = { onNoteOn, onNoteOff, onDeviceChange };
+export async function initMidi({ onNoteOn, onNoteOff, onDeviceChange, onDisconnect }) {
+  cbs = { onNoteOn, onNoteOff, onDeviceChange, onDisconnect };
 
   if (!navigator.requestMIDIAccess) {
     return { supported: false, granted: false, inputs: [] };
@@ -32,11 +32,17 @@ export async function initMidi({ onNoteOn, onNoteOff, onDeviceChange }) {
       const list = getInputList();
       cbs.onDeviceChange?.(list);
 
-      // Re-attach listener if the active device reconnected
       if (activeInput) {
-        const input = midiAccess.inputs.get(activeInput.id);
-        if (input && input.state === "connected") {
-          activeInput = input;
+        const port = midiAccess.inputs.get(activeInput.id);
+
+        if (!port || port.state === "disconnected") {
+          // FIX #4: active device disconnected — release all held MIDI notes.
+          activeInput.onmidimessage = null;
+          activeInput = null;
+          cbs.onDisconnect?.();
+        } else if (port.state === "connected") {
+          // Device reconnected — re-attach listener.
+          activeInput = port;
           activeInput.onmidimessage = handleMessage;
         }
       }
