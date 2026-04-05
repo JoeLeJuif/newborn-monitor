@@ -38,6 +38,10 @@ let lfoActive   = false;
 let osc2Enabled = false;
 let osc2Level   = 0.7; // stored so enable/disable can restore it
 
+// Tracks the user-set cutoff independently of any LFO modulation.
+// Reapplied when LFO is disabled to guarantee a clean filter state.
+let baseCutoff = 8000;
+
 function gainToDb(gain) {
   return gain <= 0 ? -Infinity : 20 * Math.log10(gain);
 }
@@ -82,6 +86,7 @@ export function setEnvelope({ attack, decay, sustain, release }) {
 }
 
 export function setFilterCutoff(freq) {
+  baseCutoff = freq;
   filter.frequency.value = freq;
 }
 
@@ -147,6 +152,9 @@ export function setLFOEnabled(enabled) {
   } else {
     lfo.stop();
     lfo.disconnect();
+    // Reapply base cutoff explicitly — prevents any residual LFO value
+    // from leaving the filter frozen at a near-zero frequency (silence).
+    filter.frequency.value = baseCutoff;
   }
 }
 
