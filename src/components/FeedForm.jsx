@@ -29,6 +29,12 @@ export default function FeedForm({ goBack, editId, onSaved }) {
   const [note, setNote] = useState(existing?.note || '');
   const [lastSide, setLastSide] = useState(existing?.lastSide || null);
   const [showTimeEdit, setShowTimeEdit] = useState(false);
+  // Mode de saisie : minuterie en direct ou saisie manuelle (événement passé).
+  // Par défaut manuel lors d'une modification, minuterie pour un nouveau boire.
+  const [entryMode, setEntryMode] = useState(editId ? 'manual' : 'timer');
+  const [manualMin, setManualMin] = useState(
+    existing?.durationSec ? String(Math.round(existing.durationSec / 60)) : '',
+  );
 
   // Minuterie : temps accumulé (s) + segment en cours.
   const [accumulated, setAccumulated] = useState(existing?.durationSec || 0);
@@ -96,15 +102,28 @@ export default function FeedForm({ goBack, editId, onSaved }) {
   }
 
   function save() {
-    const durationSec = Math.round(secondsAt(readNow()));
+    let durationSec = 0;
+    let side = null;
+    if (isBreast) {
+      if (entryMode === 'manual') {
+        durationSec = Math.round((Number(manualMin) || 0) * 60);
+        // En saisie manuelle, le sein vient du type sélectionné.
+        side = feedTypeMeta(feedType).side || null;
+      } else {
+        durationSec = Math.round(secondsAt(readNow()));
+        side = lastSide;
+      }
+    } else {
+      durationSec = existing?.durationSec || 0;
+    }
     const data = {
       type: 'feed',
       feedType,
       start,
-      durationSec: isBreast ? durationSec : existing?.durationSec || 0,
+      durationSec,
       amountMl: amountMl === '' ? null : Number(amountMl),
       inProgress,
-      lastSide: isBreast ? lastSide : null,
+      lastSide: isBreast ? side : null,
       note: note.trim(),
     };
     if (editId) updateEvent(editId, data);
@@ -124,6 +143,28 @@ export default function FeedForm({ goBack, editId, onSaved }) {
         <h1>{editId ? 'Modifier le boire' : 'Nouveau boire'}</h1>
       </header>
 
+      <div className="mode-switch" role="tablist" aria-label="Mode de saisie">
+        <button
+          role="tab"
+          aria-selected={entryMode === 'timer'}
+          className={`mode-btn ${entryMode === 'timer' ? 'mode-active' : ''}`}
+          onClick={() => setEntryMode('timer')}
+        >
+          ⏱ Minuterie
+        </button>
+        <button
+          role="tab"
+          aria-selected={entryMode === 'manual'}
+          className={`mode-btn ${entryMode === 'manual' ? 'mode-active' : ''}`}
+          onClick={() => {
+            setRunning(false);
+            setEntryMode('manual');
+          }}
+        >
+          ✎ Saisie manuelle
+        </button>
+      </div>
+
       <label className="field-label">Type d'alimentation</label>
       <div className="chip-grid">
         {FEED_TYPES.map((t) => (
@@ -137,7 +178,7 @@ export default function FeedForm({ goBack, editId, onSaved }) {
         ))}
       </div>
 
-      {isBreast && (
+      {isBreast && entryMode === 'timer' && (
         <div className="timer-card">
           <div className="timer-display">{formatTimer(liveSeconds)}</div>
           <div className="timer-side-label">
@@ -181,6 +222,21 @@ export default function FeedForm({ goBack, editId, onSaved }) {
         </div>
       )}
 
+      {isBreast && entryMode === 'manual' && (
+        <div className="field">
+          <label className="field-label">Durée au sein (minutes)</label>
+          <input
+            className="text-input"
+            type="number"
+            inputMode="numeric"
+            min="0"
+            placeholder="ex. 15"
+            value={manualMin}
+            onChange={(e) => setManualMin(e.target.value)}
+          />
+        </div>
+      )}
+
       {isBottle && (
         <div className="field">
           <label className="field-label">Quantité (ml)</label>
@@ -207,27 +263,39 @@ export default function FeedForm({ goBack, editId, onSaved }) {
         </div>
       )}
 
-      <div className="field">
-        <button
-          className="link-btn"
-          onClick={() => setShowTimeEdit((v) => !v)}
-        >
-          🕑 Heure de début : {new Date(start).toLocaleString('fr-CA', {
-            day: 'numeric',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit',
-          })} {showTimeEdit ? '▲' : '▼'}
-        </button>
-        {showTimeEdit && (
+      {entryMode === 'manual' ? (
+        <div className="field">
+          <label className="field-label">Date et heure du boire</label>
           <input
             className="text-input"
             type="datetime-local"
             value={toLocalInputValue(start)}
             onChange={(e) => setStart(fromLocalInputValue(e.target.value))}
           />
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="field">
+          <button
+            className="link-btn"
+            onClick={() => setShowTimeEdit((v) => !v)}
+          >
+            🕑 Heure de début : {new Date(start).toLocaleString('fr-CA', {
+              day: 'numeric',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit',
+            })} {showTimeEdit ? '▲' : '▼'}
+          </button>
+          {showTimeEdit && (
+            <input
+              className="text-input"
+              type="datetime-local"
+              value={toLocalInputValue(start)}
+              onChange={(e) => setStart(fromLocalInputValue(e.target.value))}
+            />
+          )}
+        </div>
+      )}
 
       <label className="toggle-row">
         <input

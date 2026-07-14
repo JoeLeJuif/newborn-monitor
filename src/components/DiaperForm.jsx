@@ -28,7 +28,6 @@ export default function DiaperForm({ goBack, editId, preset, onSaved }) {
   const [poopColor, setPoopColor] = useState(existing?.poopColor || 'mustard');
   const [poopTexture, setPoopTexture] = useState(existing?.poopTexture || 'pasty');
   const [note, setNote] = useState(existing?.note || '');
-  const [showTimeEdit, setShowTimeEdit] = useState(false);
 
   function save() {
     if (!pee && !poop) return;
@@ -138,25 +137,16 @@ export default function DiaperForm({ goBack, editId, preset, onSaved }) {
       )}
 
       <div className="field">
-        <button
-          className="link-btn"
-          onClick={() => setShowTimeEdit((v) => !v)}
-        >
-          🕑 Heure : {new Date(time).toLocaleString('fr-CA', {
-            day: 'numeric',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit',
-          })} {showTimeEdit ? '▲' : '▼'}
-        </button>
-        {showTimeEdit && (
-          <input
-            className="text-input"
-            type="datetime-local"
-            value={toLocalInputValue(time)}
-            onChange={(e) => setTime(fromLocalInputValue(e.target.value))}
-          />
-        )}
+        <label className="field-label">Date et heure</label>
+        <input
+          className="text-input"
+          type="datetime-local"
+          value={toLocalInputValue(time)}
+          onChange={(e) => setTime(fromLocalInputValue(e.target.value))}
+        />
+        <p className="field-hint">
+          Par défaut maintenant — modifie-la pour une couche passée.
+        </p>
       </div>
 
       <div className="field">
