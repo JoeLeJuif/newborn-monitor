@@ -1,6 +1,6 @@
 // Service worker minimal : cache de l'app shell pour un usage hors-ligne.
 // Stratégie : réseau d'abord, repli sur le cache (app + navigations).
-const CACHE = 'suivi-bebe-v1';
+const CACHE = 'newborn-monitor-v1';
 const CORE = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -22,6 +22,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
+  // Ne jamais intercepter les requêtes vers d'autres origines (ex. Supabase) :
+  // l'API de synchro ne doit pas être mise en cache.
+  if (new URL(request.url).origin !== self.location.origin) return;
 
   event.respondWith(
     fetch(request)

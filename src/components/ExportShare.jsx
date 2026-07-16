@@ -11,7 +11,7 @@ export default function ExportShare({ onSaved }) {
   async function share() {
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Suivi du nouveau-né', text });
+        await navigator.share({ title: 'Newborn Monitor', text });
         return;
       } catch {
         // partage annulé — on ne fait rien
@@ -54,7 +54,7 @@ export default function ExportShare({ onSaved }) {
           className="btn btn-secondary"
           onClick={() =>
             downloadFile(
-              `suivi-bebe-${fileStamp()}.txt`,
+              `newborn-monitor-${fileStamp()}.txt`,
               text,
               'text/plain;charset=utf-8',
             )
@@ -66,7 +66,7 @@ export default function ExportShare({ onSaved }) {
           className="btn btn-secondary"
           onClick={() =>
             downloadFile(
-              `suivi-bebe-${fileStamp()}.csv`,
+              `newborn-monitor-${fileStamp()}.csv`,
               buildCSV(events, 24),
               'text/csv;charset=utf-8',
             )

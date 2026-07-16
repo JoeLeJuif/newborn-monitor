@@ -1,5 +1,12 @@
-// Dialogue de confirmation (utilisé avant suppression).
-export default function ConfirmDialog({ open, title, message, onConfirm, onCancel }) {
+// Dialogue de confirmation (suppression, actions du foyer, etc.).
+export default function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel = 'Supprimer',
+  onConfirm,
+  onCancel,
+}) {
   if (!open) return null;
   return (
     <div className="modal-backdrop" onClick={onCancel}>
@@ -16,7 +23,7 @@ export default function ConfirmDialog({ open, title, message, onConfirm, onCance
             Annuler
           </button>
           <button className="btn btn-danger" onClick={onConfirm}>
-            Supprimer
+            {confirmLabel}
           </button>
         </div>
       </div>

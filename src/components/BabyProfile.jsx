@@ -7,7 +7,7 @@ import {
   formatBabyAge,
 } from '../lib/time.js';
 
-export default function BabyProfile({ goBack, onSaved }) {
+export default function BabyProfile({ navigate, goBack, onSaved }) {
   const { baby, setBaby } = useStore();
   const [form, setForm] = useState({ ...baby });
 
@@ -125,6 +125,14 @@ export default function BabyProfile({ goBack, onSaved }) {
 
       <button className="btn btn-primary btn-save" onClick={save}>
         Enregistrer le profil
+      </button>
+
+      <button
+        className="btn btn-secondary"
+        style={{ marginTop: 12 }}
+        onClick={() => navigate('household')}
+      >
+        📱 Synchronisation multi-appareils
       </button>
     </div>
   );

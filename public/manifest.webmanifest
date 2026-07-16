@@ -1,7 +1,7 @@
 {
-  "name": "Suivi du nouveau-né",
-  "short_name": "Suivi bébé",
-  "description": "Suivi des boires et des couches, hors-ligne et sans compte.",
+  "name": "Newborn Monitor",
+  "short_name": "Newborn Monitor",
+  "description": "Suivi des boires et des couches, synchronisé entre appareils.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",

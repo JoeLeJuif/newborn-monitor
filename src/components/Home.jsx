@@ -19,9 +19,17 @@ function StatCard({ label, value, sub }) {
   );
 }
 
+const SYNC_BADGE = {
+  syncing: { label: 'Synchronisation…', className: 'sync-dot-syncing' },
+  synced: { label: 'Synchronisé', className: 'sync-dot-ok' },
+  offline: { label: 'Hors ligne', className: 'sync-dot-off' },
+  error: { label: 'Erreur de synchro', className: 'sync-dot-error' },
+};
+
 export default function Home({ navigate }) {
-  const { events, baby } = useStore();
+  const { events, baby, syncConfigured, household, syncStatus } = useStore();
   const s = dashboardStats(events);
+  const badge = syncConfigured && household?.id ? SYNC_BADGE[syncStatus] : null;
 
   return (
     <div className="screen home">
@@ -30,6 +38,16 @@ export default function Home({ navigate }) {
           <h1 className="app-title">{baby.name || 'Mon bébé'}</h1>
           {baby.birth && (
             <p className="app-subtitle">Âge : {formatBabyAge(baby.birth)}</p>
+          )}
+          {badge && (
+            <button
+              className="sync-badge"
+              onClick={() => navigate('household')}
+              aria-label={`Synchronisation : ${badge.label}`}
+            >
+              <span className={`sync-dot ${badge.className}`} aria-hidden="true" />
+              {badge.label}
+            </button>
           )}
         </div>
         <button

@@ -8,6 +8,7 @@ import History from './components/History.jsx';
 import EventEditor from './components/EventEditor.jsx';
 import PeriodSummary from './components/PeriodSummary.jsx';
 import BabyProfile from './components/BabyProfile.jsx';
+import HouseholdSetup from './components/HouseholdSetup.jsx';
 import ExportShare from './components/ExportShare.jsx';
 import BottomNav from './components/BottomNav.jsx';
 import Toast from './components/Toast.jsx';
@@ -87,7 +88,9 @@ function App() {
       case 'summary':
         return <PeriodSummary />;
       case 'profile':
-        return <BabyProfile goBack={goBack} onSaved={showToast} />;
+        return <BabyProfile navigate={navigate} goBack={goBack} onSaved={showToast} />;
+      case 'household':
+        return <HouseholdSetup goBack={goBack} onSaved={showToast} />;
       case 'export':
         return <ExportShare onSaved={showToast} />;
       default:

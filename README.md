@@ -1,11 +1,11 @@
-# Suivi bébé
+# Newborn Monitor
 
 Petite application mobile pour suivre l'alimentation et les couches d'un
 nouveau-né. Conçue pour être utilisable rapidement, même la nuit : gros boutons,
 utilisable d'une seule main, mode sombre, et le moins de saisie possible.
 
-**React + Vite**, 100 % local (aucun compte, aucune donnée envoyée à un serveur),
-fonctionne **hors-ligne** (PWA installable).
+**React + Vite**, fonctionne **hors-ligne** (PWA installable) et se **synchronise
+entre appareils** via Supabase avec un simple « code de foyer » (sans compte).
 
 > ⚠️ Cette application sert uniquement à consigner et résumer les observations
 > des parents. Elle ne fournit **aucun avis médical** et n'affirme pas qu'un bébé

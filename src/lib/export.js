@@ -53,7 +53,7 @@ export function buildTextSummary(events, baby, hours = 24) {
   const agg = aggregate(range);
   const lines = [];
 
-  lines.push('RÉSUMÉ DU SUIVI DU NOUVEAU-NÉ');
+  lines.push('NEWBORN MONITOR — RÉSUMÉ DU SUIVI');
   if (baby?.name) lines.push(`Bébé : ${baby.name}`);
   if (baby?.birth) lines.push(`Âge : ${formatBabyAge(baby.birth)}`);
   lines.push(`Période : dernières ${hours} h`);
