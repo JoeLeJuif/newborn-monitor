@@ -7,6 +7,7 @@ import DiaperForm from './components/DiaperForm.jsx';
 import History from './components/History.jsx';
 import EventEditor from './components/EventEditor.jsx';
 import PeriodSummary from './components/PeriodSummary.jsx';
+import Statistics from './components/Statistics.jsx';
 import BabyProfile from './components/BabyProfile.jsx';
 import HouseholdSetup from './components/HouseholdSetup.jsx';
 import ExportShare from './components/ExportShare.jsx';
@@ -86,7 +87,9 @@ function App() {
           />
         );
       case 'summary':
-        return <PeriodSummary />;
+        return <PeriodSummary navigate={navigate} />;
+      case 'stats':
+        return <Statistics goBack={goBack} />;
       case 'profile':
         return <BabyProfile navigate={navigate} goBack={goBack} onSaved={showToast} />;
       case 'household':

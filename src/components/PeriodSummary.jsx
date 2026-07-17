@@ -20,7 +20,7 @@ function Line({ label, value }) {
   );
 }
 
-export default function PeriodSummary() {
+export default function PeriodSummary({ navigate }) {
   const { events } = useStore();
   const [period, setPeriod] = useState('today');
   const { from, to, label } = periodRange(period);
@@ -49,6 +49,14 @@ export default function PeriodSummary() {
         <Line label="Nombre de pipis" value={agg.pees} />
         <Line label="Nombre de cacas" value={agg.poops} />
       </div>
+
+      <button
+        className="btn btn-secondary"
+        style={{ marginTop: 16 }}
+        onClick={() => navigate('stats')}
+      >
+        📊 Voir les statistiques détaillées
+      </button>
 
       <p className="disclaimer">
         Résumé des observations consignées. Ne constitue pas un avis médical.
