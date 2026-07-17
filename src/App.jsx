@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { StoreProvider } from './store/useStore.jsx';
+import { StoreProvider, useStore } from './store/useStore.jsx';
 import { loadTheme, saveTheme } from './lib/storage.js';
 import Home from './components/Home.jsx';
 import FeedForm from './components/FeedForm.jsx';
@@ -114,10 +114,23 @@ function App() {
         {THEME_ICON[theme]}
       </button>
 
+      <StorageBanner />
       <main className="app-main">{render()}</main>
 
       {showNav && <BottomNav current={current.name} navigate={navigate} />}
       <Toast message={toast} />
+    </div>
+  );
+}
+
+// Bannière persistante en cas d'échec de persistance locale (quota, etc.).
+function StorageBanner() {
+  const { storageError, clearStorageError } = useStore();
+  if (!storageError) return null;
+  return (
+    <div className="storage-banner" role="alert">
+      <span>{storageError}</span>
+      <button onClick={clearStorageError} aria-label="Fermer">✕</button>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useStore } from '../store/useStore.jsx';
 import { normalizeCode } from '../lib/sync.js';
+import { prepareRestore } from '../lib/dataops.js';
 import { downloadFile } from '../lib/export.js';
 import ConfirmDialog from './ConfirmDialog.jsx';
 
@@ -35,6 +36,8 @@ export default function HouseholdSetup({ goBack, onSaved }) {
   const [copied, setCopied] = useState(false);
   // Confirmation explicite avant de téléverser les données locales vers un foyer.
   const [confirmCreate, setConfirmCreate] = useState(false);
+  // Import en attente de confirmation : { data, replaceCount } (P1-2).
+  const [restorePending, setRestorePending] = useState(null);
   // Choix demandé quand un appareil avec des données rejoint un foyer.
   const [joinChoice, setJoinChoice] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -57,21 +60,49 @@ export default function HouseholdSetup({ goBack, onSaved }) {
     onSaved?.('Sauvegarde exportée');
   }
 
+  // P1-2 + P1-4 : valide le fichier, refuse si invalide (aucune modification),
+  // et exige une confirmation + sauvegarde préalable avant de remplacer des
+  // données locales existantes.
   function doRestoreBackup(e) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
+      setError('');
+      let data;
       try {
-        restoreBackup(JSON.parse(reader.result));
-        onSaved?.('Sauvegarde restaurée');
-        setError('');
+        data = JSON.parse(reader.result);
       } catch {
-        setError('Fichier de sauvegarde invalide.');
+        setError('Fichier illisible : JSON invalide.');
+        return;
       }
+      const decision = prepareRestore(data, events.length);
+      if (decision.status === 'invalid') {
+        setError(decision.error); // rien n'est modifié
+        return;
+      }
+      if (decision.status === 'apply') {
+        // Aucune donnée locale à remplacer.
+        applyRestore(data);
+        return;
+      }
+      // status 'confirm' : sauvegarde automatique des données actuelles, puis
+      // confirmation explicite avant remplacement.
+      doExportBackup();
+      setRestorePending({ data, replaceCount: decision.replaceCount });
     };
     reader.readAsText(file);
     e.target.value = '';
+  }
+
+  function applyRestore(data) {
+    try {
+      restoreBackup(data);
+      onSaved?.('Sauvegarde restaurée');
+      setError('');
+    } catch (err) {
+      setError(err?.message || 'Sauvegarde invalide.');
+    }
   }
 
   // Clic « Créer un foyer » : s'il y a des données locales, on exige une
@@ -378,6 +409,39 @@ export default function HouseholdSetup({ goBack, onSaved }) {
             </div>
           )}
         </>
+      )}
+
+      {restorePending && (
+        <div className="modal-backdrop" onClick={() => setRestorePending(null)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="modal-title">Remplacer les données locales ?</h2>
+            <p className="modal-message">
+              {`Cette restauration va remplacer ${restorePending.replaceCount} événement${restorePending.replaceCount > 1 ? 's' : ''} sur cet appareil.`}{' '}
+              Une sauvegarde de tes données actuelles vient d'être téléchargée.
+              Les données du foyer (Supabase) ne sont pas supprimées.
+            </p>
+            <div className="export-actions">
+              <button
+                className="btn btn-danger"
+                onClick={() => {
+                  const pending = restorePending;
+                  setRestorePending(null);
+                  applyRestore(pending.data);
+                }}
+              >
+                Remplacer maintenant
+              </button>
+              <button className="btn btn-ghost" onClick={() => setRestorePending(null)}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {error && <p className="form-error">{error}</p>}
