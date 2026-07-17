@@ -126,8 +126,8 @@ export default function FeedForm({ goBack, editId, onSaved }) {
       lastSide: isBreast ? side : null,
       note: note.trim(),
     };
-    if (editId) updateEvent(editId, data);
-    else addEvent(data);
+    const ok = editId ? updateEvent(editId, data) : !!addEvent(data);
+    if (!ok) return; // échec de persistance : la bannière informe, pas de faux succès
     onSaved?.('Boire enregistré');
     goBack();
   }

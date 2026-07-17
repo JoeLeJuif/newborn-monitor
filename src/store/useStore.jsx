@@ -34,7 +34,13 @@ import {
   getDeviceId,
 } from '../lib/storage.js';
 import { nowISO } from '../lib/time.js';
+import { outboxAfterDrain, validateBackup, persistThenCommit } from '../lib/dataops.js';
 import * as sync from '../lib/sync.js';
+
+const STORAGE_FULL_MSG =
+  'Espace de stockage insuffisant : la dernière donnée n’a peut-être pas été ' +
+  'enregistrée sur cet appareil. Exporte une sauvegarde et libère de l’espace ' +
+  '(par ex. une photo du bébé trop lourde).';
 
 const StoreContext = createContext(null);
 
@@ -48,6 +54,8 @@ export function StoreProvider({ children }) {
   const [household, setHouseholdState] = useState(() => loadHousehold());
   // off | syncing | synced | offline | error
   const [syncStatus, setSyncStatus] = useState('off');
+  // Message d'erreur de persistance locale (quota dépassé, etc.).
+  const [storageError, setStorageError] = useState('');
   const deviceId = useRef(getDeviceId());
   const babyFirst = useRef(true);
 
@@ -61,7 +69,12 @@ export function StoreProvider({ children }) {
 
   useEffect(() => {
     allRef.current = allEvents;
-    saveEvents(allEvents);
+    try {
+      saveEvents(allEvents);
+    } catch {
+      // Persistance échouée (quota) : prévenir sans faire croire à un succès.
+      setStorageError(STORAGE_FULL_MSG);
+    }
   }, [allEvents]);
 
   useEffect(() => {
@@ -70,7 +83,11 @@ export function StoreProvider({ children }) {
       babyFirst.current = false;
       return;
     }
-    saveBaby(baby);
+    try {
+      saveBaby(baby);
+    } catch {
+      setStorageError(STORAGE_FULL_MSG);
+    }
   }, [baby]);
 
   useEffect(() => {
@@ -107,7 +124,20 @@ export function StoreProvider({ children }) {
       });
   }, []);
 
-  // ── Mutations locales (toujours instantanées) ──
+  // ── Mutations locales ──
+  // Persistance d'abord : si l'écriture localStorage échoue (quota…), on ne
+  // modifie NI l'état React NI l'affichage (rollback), on signale l'erreur et
+  // on renvoie un échec pour que l'appelant n'affiche pas de faux succès.
+  function commitEvents(next) {
+    const r = persistThenCommit(next, saveEvents);
+    if (!r.committed) {
+      setStorageError(STORAGE_FULL_MSG);
+      return false;
+    }
+    setAllEvents(next);
+    return true;
+  }
+
   function addEvent(data) {
     const ev = {
       id: newId(),
@@ -117,46 +147,56 @@ export function StoreProvider({ children }) {
       deleted: false,
       ...data,
     };
-    setAllEvents((prev) => [...prev, ev]);
+    if (!commitEvents([...allRef.current, ev])) return null;
     pushOne(ev);
     return ev;
   }
 
   function updateEvent(id, patch) {
     let updated = null;
-    setAllEvents((prev) =>
-      prev.map((e) => {
-        if (e.id !== id) return e;
-        updated = { ...e, ...patch, updatedAt: nowISO() };
-        return updated;
-      }),
-    );
-    if (updated) pushOne(updated);
+    const next = allRef.current.map((e) => {
+      if (e.id !== id) return e;
+      updated = { ...e, ...patch, updatedAt: nowISO() };
+      return updated;
+    });
+    if (!updated) return false;
+    if (!commitEvents(next)) return false;
+    pushOne(updated);
+    return true;
   }
 
   function deleteEvent(id) {
     let tombstone = null;
-    setAllEvents((prev) =>
-      prev.map((e) => {
-        if (e.id !== id) return e;
-        tombstone = { ...e, deleted: true, updatedAt: nowISO() };
-        return tombstone;
-      }),
-    );
-    if (tombstone) pushOne(tombstone);
+    const next = allRef.current.map((e) => {
+      if (e.id !== id) return e;
+      tombstone = { ...e, deleted: true, updatedAt: nowISO() };
+      return tombstone;
+    });
+    if (!tombstone) return false;
+    if (!commitEvents(next)) return false;
+    pushOne(tombstone);
+    return true;
   }
 
   function getEvent(id) {
     return allEvents.find((e) => e.id === id && !e.deleted) || null;
   }
 
+  // Persistance d'abord : en cas d'échec, on garde le profil précédent (rollback)
+  // et on renvoie false pour ne pas afficher de faux succès (photo incluse).
   function setBaby(next) {
     const stamped = { ...next, updatedAt: nowISO() };
+    const r = persistThenCommit(stamped, saveBaby);
+    if (!r.committed) {
+      setStorageError(STORAGE_FULL_MSG);
+      return false;
+    }
     setBabyState(stamped);
     const hid = householdRef.current?.id;
     if (sync.isSyncConfigured && hid) {
       sync.pushBaby(hid, stamped).catch(() => {});
     }
+    return true;
   }
 
   // ── Synchronisation complète : pull + fusion, puis drainage de l'outbox.
@@ -181,13 +221,16 @@ export function StoreProvider({ children }) {
       // 2. Pousser : tout le local au premier passage pour ce foyer
       //    (migration initiale), sinon seulement l'outbox.
       const needInitialUpload = loadMigratedFor() !== hid;
-      const outboxIds = loadOutbox();
+      const outboxSnapshot = loadOutbox();
       const toPush = needInitialUpload
         ? allRef.current
-        : allRef.current.filter((e) => outboxIds.includes(e.id));
+        : allRef.current.filter((e) => outboxSnapshot.includes(e.id));
+      const drainedIds = toPush.map((e) => e.id);
       if (toPush.length) await sync.pushEvents(hid, toPush);
       if (needInitialUpload) saveMigratedFor(hid);
-      saveOutbox([]);
+      // Retire seulement les ids réellement poussés ; préserve tout id ajouté
+      // à l'outbox pendant la synchronisation (concurrence).
+      saveOutbox(outboxAfterDrain(loadOutbox(), drainedIds));
       // 3. Profil bébé (gardé par updated_at côté serveur).
       const b = babyRef.current;
       if (b?.updatedAt && (b.name || b.birth || b.birthWeight)) {
@@ -303,11 +346,13 @@ export function StoreProvider({ children }) {
     };
   }
 
+  // Ne remplace jamais les données locales avec un import invalide (valide
+  // d'abord). Ne supprime aucune donnée Supabase : au prochain sync, l'upsert
+  // est gardé par updated_at et le pull refusionne les événements distants.
   function restoreBackup(data) {
-    if (!data || data.app !== 'newborn-monitor' || !Array.isArray(data.events)) {
-      throw new Error('invalid backup');
-    }
-    setAllEvents(data.events);
+    const v = validateBackup(data);
+    if (!v.ok) throw new Error(v.error);
+    setAllEvents(v.events);
     if (data.baby) setBabyState(data.baby);
     saveMigratedFor(''); // forcer un téléversement complet au prochain sync
   }
@@ -324,6 +369,8 @@ export function StoreProvider({ children }) {
     syncConfigured: sync.isSyncConfigured,
     household,
     syncStatus,
+    storageError,
+    clearStorageError: () => setStorageError(''),
     createHousehold,
     joinHousehold,
     leaveHousehold,

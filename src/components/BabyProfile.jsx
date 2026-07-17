@@ -6,25 +6,33 @@ import {
   fromLocalInputValue,
   formatBabyAge,
 } from '../lib/time.js';
+import { resizeImageFile } from '../lib/image.js';
 
 export default function BabyProfile({ navigate, goBack, onSaved }) {
   const { baby, setBaby } = useStore();
   const [form, setForm] = useState({ ...baby });
+  const [photoError, setPhotoError] = useState('');
 
   function set(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function onPhoto(e) {
+  // Redimensionne/compresse la nouvelle photo avant stockage (évite de saturer
+  // le quota localStorage). Les photos déjà enregistrées ne sont pas touchées.
+  async function onPhoto(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => set('photo', reader.result);
-    reader.readAsDataURL(file);
+    setPhotoError('');
+    try {
+      const dataUrl = await resizeImageFile(file, { maxDim: 1024, quality: 0.8 });
+      set('photo', dataUrl);
+    } catch {
+      setPhotoError('Image illisible. Essaie une autre photo.');
+    }
   }
 
   function save() {
-    setBaby(form);
+    if (!setBaby(form)) return; // échec de persistance : pas de faux succès
     onSaved?.('Profil enregistré');
     goBack();
   }
@@ -50,6 +58,7 @@ export default function BabyProfile({ navigate, goBack, onSaved }) {
             Retirer la photo
           </button>
         )}
+        {photoError && <p className="form-error">{photoError}</p>}
       </div>
 
       {form.birth && (
