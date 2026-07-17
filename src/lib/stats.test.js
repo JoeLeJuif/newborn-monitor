@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { computeStats, windowStats, weeklyTrend } from './stats.js';
+import {
+  computeStats,
+  windowStats,
+  weeklyTrend,
+  lastEvents,
+  feedIntervalSeries,
+  dayNightSplit,
+  sideSplit,
+  hourlyActivity,
+  computeInsights,
+  computeDashboard,
+} from './stats.js';
 
 // Heure locale fixe pour des tests déterministes quel que soit le fuseau.
 const NOW = new Date('2026-07-15T12:00:00').getTime();
@@ -168,5 +179,127 @@ describe('identique avant / après synchronisation', () => {
       feed(-3 * H, { deleted: true }), // tombstone reçu d’un autre appareil
     ]);
     expect(computeStats(afterSync, NOW)).toEqual(computeStats(before, NOW));
+  });
+});
+
+describe('Dashboard v2 — dernier événement', () => {
+  it('dernier ts par type, en ignorant les supprimés', () => {
+    const evs = [
+      feed(-1 * H),
+      feed(-3 * H, { deleted: true }),
+      diaper(-2 * H, { pee: true, poop: false }),
+      diaper(-5 * H, { pee: false, poop: true }),
+    ];
+    const l = lastEvents(evs);
+    expect(l.lastFeedTs).toBe(NOW - 1 * H);
+    expect(l.lastPeeTs).toBe(NOW - 2 * H);
+    expect(l.lastPoopTs).toBe(NOW - 5 * H);
+  });
+  it('null quand aucun événement du type', () => {
+    expect(lastEvents([]).lastFeedTs).toBeNull();
+  });
+});
+
+describe('Dashboard v2 — intervalles (moyen + plus long)', () => {
+  it('avgIntervalMs et longestIntervalMs', () => {
+    const s = windowStats([feed(-1 * H), feed(-3 * H), feed(-6 * H)], NOW - D, NOW, 1);
+    expect(s.avgIntervalMs).toBe(2.5 * H);
+    expect(s.longestIntervalMs).toBe(3 * H);
+  });
+  it('feedIntervalSeries : derniers écarts, ordre chronologique', () => {
+    const series = feedIntervalSeries([feed(-1 * H), feed(-3 * H), feed(-6 * H)], 12);
+    expect(series.map((p) => p.gapMs)).toEqual([3 * H, 2 * H]);
+  });
+  it('série vide si moins de 2 boires', () => {
+    expect(feedIntervalSeries([feed(-1 * H)])).toEqual([]);
+  });
+});
+
+describe('Dashboard v2 — agrégation 7 jours (temps au sein)', () => {
+  it('weeklyTrend accumule feeds/breastSec/pees/poops par jour', () => {
+    const t = weeklyTrend(
+      [
+        feed(-1 * H, { feedType: 'left', durationSec: 600 }),
+        feed(-2 * H, { feedType: 'formula', durationSec: 300 }),
+        diaper(-1 * H, { pee: true, poop: true }),
+      ],
+      NOW,
+    );
+    expect(t[6].feeds).toBe(2);
+    expect(t[6].breastSec).toBe(600);
+    expect(t[6].pees).toBe(1);
+    expect(t[6].poops).toBe(1);
+  });
+});
+
+describe('Dashboard v2 — jour / nuit', () => {
+  it('6h–18h = jour, sinon nuit (heure locale)', () => {
+    const evs = [feed(-4 * H), feed(-1 * H), feed(-10 * H), feed(-16 * H)];
+    const dn = dayNightSplit(evs, NOW - 7 * D, NOW);
+    expect(dn.day).toBe(2);
+    expect(dn.night).toBe(2);
+    expect(dn.dayPct).toBeCloseTo(0.5);
+  });
+  it('pourcentages null si aucun boire', () => {
+    expect(dayNightSplit([], NOW - 7 * D, NOW).dayPct).toBeNull();
+  });
+});
+
+describe('Dashboard v2 — gauche / droite', () => {
+  it('répartit la durée, les deux = 50/50, ignore durées manquantes', () => {
+    const evs = [
+      feed(-1 * H, { feedType: 'left', lastSide: 'left', durationSec: 600 }),
+      feed(-2 * H, { feedType: 'right', lastSide: 'right', durationSec: 300 }),
+      feed(-3 * H, { feedType: 'both', lastSide: 'both', durationSec: 200 }),
+      feed(-4 * H, { feedType: 'left', lastSide: 'left', durationSec: undefined }),
+    ];
+    const ss = sideSplit(evs, NOW - 7 * D, NOW);
+    expect(ss.leftSec).toBe(700);
+    expect(ss.rightSec).toBe(400);
+    expect(ss.leftPct).toBeCloseTo(700 / 1100);
+  });
+});
+
+describe('Dashboard v2 — activité par heure', () => {
+  it('compte par heure locale, ignore les supprimés', () => {
+    const h = hourlyActivity([feed(-4 * H), feed(-1 * H), feed(-1 * H, { deleted: true })], NOW - 7 * D, NOW);
+    expect(h).toHaveLength(24);
+    expect(h[8]).toBe(1);
+    expect(h[11]).toBe(1);
+  });
+});
+
+describe('Dashboard v2 — observations', () => {
+  it('aucune observation si données insuffisantes', () => {
+    expect(computeInsights([], NOW)).toEqual([]);
+    expect(computeInsights([feed(-1 * H)], NOW)).toEqual([]);
+  });
+  it('produit une observation (côté dominant) avec assez de données', () => {
+    const evs = [];
+    for (let i = 0; i < 6; i += 1) {
+      evs.push(feed(-i * 6 * H - H, { feedType: 'left', lastSide: 'left', durationSec: 600 }));
+    }
+    const ins = computeInsights(evs, NOW);
+    expect(ins.length).toBeGreaterThanOrEqual(1);
+    expect(ins.length).toBeLessThanOrEqual(3);
+    expect(ins.some((t) => /gauche/i.test(t))).toBe(true);
+  });
+});
+
+describe('Dashboard v2 — agrégateur & compat anciennes données', () => {
+  it('computeDashboard renvoie toutes les sections', () => {
+    const d = computeDashboard([feed(-1 * H), diaper(-2 * H, { pee: true })], NOW);
+    expect(d.trend).toHaveLength(7);
+    expect(d.hourly).toHaveLength(24);
+    expect(Array.isArray(d.intervals)).toBe(true);
+    expect(Array.isArray(d.insights)).toBe(true);
+  });
+  it('anciennes structures compatibles (champs manquants, sans deleted)', () => {
+    const legacyFeed = { id: 'l1', type: 'feed', start: new Date(NOW - 2 * H).toISOString(), feedType: 'left' };
+    const legacyDiaper = { id: 'l2', type: 'diaper', time: new Date(NOW - 3 * H).toISOString(), pee: true };
+    expect(() => computeDashboard([legacyFeed, legacyDiaper], NOW)).not.toThrow();
+    const d = computeDashboard([legacyFeed, legacyDiaper], NOW);
+    expect(d.last.lastFeedTs).toBe(NOW - 2 * H);
+    expect(d.kpi.feedCount).toBe(1);
   });
 });
