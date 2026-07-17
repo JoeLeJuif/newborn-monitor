@@ -2,7 +2,7 @@
 const TABS = [
   { view: 'home', label: 'Accueil', icon: '🏠' },
   { view: 'history', label: 'Historique', icon: '📋' },
-  { view: 'summary', label: 'Résumé', icon: '📊' },
+  { view: 'summary', label: 'KPI', icon: '📊' },
   { view: 'export', label: 'Partager', icon: '📤' },
 ];
 

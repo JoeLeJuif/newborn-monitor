@@ -272,7 +272,7 @@ export function computeInsights(events, now = Date.now()) {
   return out.slice(0, 3);
 }
 
-// Agrégateur unique pour le dashboard (garde Statistics.jsx léger).
+// Agrégateur unique pour le dashboard (garde KpiDashboard.jsx léger).
 export function computeDashboard(events, now = Date.now()) {
   const list = Array.isArray(events) ? events : [];
   const start = new Date(now);
