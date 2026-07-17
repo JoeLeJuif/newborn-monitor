@@ -32,7 +32,7 @@ export default function BabyProfile({ navigate, goBack, onSaved }) {
   }
 
   function save() {
-    setBaby(form);
+    if (!setBaby(form)) return; // échec de persistance : pas de faux succès
     onSaved?.('Profil enregistré');
     goBack();
   }

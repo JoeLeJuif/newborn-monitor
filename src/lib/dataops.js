@@ -33,6 +33,12 @@ export function isValidEvent(e) {
 }
 
 // Complète seulement les champs manquants compatibles, sans altérer l'existant.
+// updatedAt : conservé s'il est valide ; sinon repli sur la date de survenue de
+// l'événement (start/time) — JAMAIS `now`. Ainsi un ancien import garde un
+// updatedAt ancien et, en cas de conflit au sync, la version distante plus
+// récente l'emporte (garde-fou client mergeEvents + garde-fou serveur
+// upsert_events sur updated_at). Un import ne peut donc pas écraser une version
+// distante plus récente ni s'attribuer artificiellement un horodatage récent.
 export function normalizeEvent(e) {
   const d = eventDateValue(e);
   return {
@@ -40,6 +46,18 @@ export function normalizeEvent(e) {
     deleted: !!e.deleted,
     updatedAt: isNonEmptyString(e.updatedAt) ? e.updatedAt : d,
   };
+}
+
+// Persistance atomique côté client : tente d'écrire `next` via `persist` ; en
+// cas d'échec (quota, etc.) renvoie committed:false pour que l'appelant
+// conserve l'état précédent (rollback) au lieu de laisser croire à un succès.
+export function persistThenCommit(next, persist) {
+  try {
+    persist(next);
+    return { committed: true, value: next };
+  } catch (error) {
+    return { committed: false, error };
+  }
 }
 
 // Valide la structure globale + chaque événement. Refuse tout le fichier si une

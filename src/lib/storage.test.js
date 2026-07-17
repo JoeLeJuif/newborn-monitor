@@ -2,10 +2,13 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   saveEvents,
   loadEvents,
+  saveBaby,
+  loadBaby,
   saveOutbox,
   saveTheme,
   StorageWriteError,
 } from './storage.js';
+import { persistThenCommit } from './dataops.js';
 
 function makeLS() {
   const map = new Map();
@@ -56,5 +59,30 @@ describe('P1-3 — quota localStorage', () => {
     };
     expect(() => saveOutbox(['x'])).not.toThrow();
     expect(() => saveTheme('dark')).not.toThrow();
+  });
+});
+
+describe('Point 1 — cohérence état/localStorage après échec (rollback du store)', () => {
+  it('événements : échec de persistance -> localStorage conserve la valeur précédente', () => {
+    const prev = [{ id: 'a', type: 'feed' }];
+    saveEvents(prev);
+    globalThis.localStorage.setItem = () => {
+      throw quotaError();
+    };
+    // Le store fait exactement ceci : persister d'abord, ne committer que si OK.
+    const r = persistThenCommit([...prev, { id: 'b', type: 'feed' }], saveEvents);
+    expect(r.committed).toBe(false); // -> le store ne fait PAS setAllEvents (rollback)
+    expect(loadEvents()).toEqual(prev); // localStorage cohérent : ancienne valeur
+  });
+
+  it('profil bébé : échec de persistance -> localStorage conserve le profil précédent', () => {
+    const prev = { name: 'Léa', updatedAt: '2026-07-15T00:00:00Z' };
+    saveBaby(prev);
+    globalThis.localStorage.setItem = () => {
+      throw quotaError();
+    };
+    const r = persistThenCommit({ name: 'Léa', photo: 'ENORME', updatedAt: 'x' }, saveBaby);
+    expect(r.committed).toBe(false); // -> pas de setBabyState (rollback)
+    expect(loadBaby()).toEqual(prev);
   });
 });

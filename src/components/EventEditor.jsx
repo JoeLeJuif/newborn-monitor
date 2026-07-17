@@ -40,7 +40,7 @@ export default function EventEditor({ navigate, goBack, id, onSaved }) {
   }
 
   function doDelete() {
-    deleteEvent(id);
+    if (!deleteEvent(id)) return; // échec de persistance : pas de faux succès
     onSaved?.('Événement supprimé');
     goBack();
   }

@@ -4,7 +4,14 @@ import {
   validateBackup,
   prepareRestore,
   computeResizeDimensions,
+  persistThenCommit,
 } from './dataops.js';
+
+function quotaError() {
+  const e = new Error('quota');
+  e.name = 'QuotaExceededError';
+  return e;
+}
 
 const feed = (over = {}) => ({
   id: 'e1',
@@ -85,6 +92,24 @@ describe('P1-2 — décision de restauration', () => {
   it('sans données locales : applique directement', () => {
     const d = prepareRestore(backup([feed()]), 0);
     expect(d.status).toBe('apply');
+  });
+});
+
+describe('Point 1 — persistThenCommit (rollback)', () => {
+  it('succès : committed true, valeur transmise', () => {
+    const written = [];
+    const r = persistThenCommit(['x'], (v) => written.push(v));
+    expect(r.committed).toBe(true);
+    expect(r.value).toEqual(['x']);
+    expect(written).toHaveLength(1);
+  });
+  it('échec (quota) : committed false, aucune valeur committée', () => {
+    const r = persistThenCommit(['x'], () => {
+      throw quotaError();
+    });
+    expect(r.committed).toBe(false);
+    expect(r.value).toBeUndefined();
+    expect(r.error.name).toBe('QuotaExceededError');
   });
 });
 

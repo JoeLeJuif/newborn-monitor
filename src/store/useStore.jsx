@@ -34,7 +34,7 @@ import {
   getDeviceId,
 } from '../lib/storage.js';
 import { nowISO } from '../lib/time.js';
-import { outboxAfterDrain, validateBackup } from '../lib/dataops.js';
+import { outboxAfterDrain, validateBackup, persistThenCommit } from '../lib/dataops.js';
 import * as sync from '../lib/sync.js';
 
 const STORAGE_FULL_MSG =
@@ -124,7 +124,20 @@ export function StoreProvider({ children }) {
       });
   }, []);
 
-  // ── Mutations locales (toujours instantanées) ──
+  // ── Mutations locales ──
+  // Persistance d'abord : si l'écriture localStorage échoue (quota…), on ne
+  // modifie NI l'état React NI l'affichage (rollback), on signale l'erreur et
+  // on renvoie un échec pour que l'appelant n'affiche pas de faux succès.
+  function commitEvents(next) {
+    const r = persistThenCommit(next, saveEvents);
+    if (!r.committed) {
+      setStorageError(STORAGE_FULL_MSG);
+      return false;
+    }
+    setAllEvents(next);
+    return true;
+  }
+
   function addEvent(data) {
     const ev = {
       id: newId(),
@@ -134,46 +147,56 @@ export function StoreProvider({ children }) {
       deleted: false,
       ...data,
     };
-    setAllEvents((prev) => [...prev, ev]);
+    if (!commitEvents([...allRef.current, ev])) return null;
     pushOne(ev);
     return ev;
   }
 
   function updateEvent(id, patch) {
     let updated = null;
-    setAllEvents((prev) =>
-      prev.map((e) => {
-        if (e.id !== id) return e;
-        updated = { ...e, ...patch, updatedAt: nowISO() };
-        return updated;
-      }),
-    );
-    if (updated) pushOne(updated);
+    const next = allRef.current.map((e) => {
+      if (e.id !== id) return e;
+      updated = { ...e, ...patch, updatedAt: nowISO() };
+      return updated;
+    });
+    if (!updated) return false;
+    if (!commitEvents(next)) return false;
+    pushOne(updated);
+    return true;
   }
 
   function deleteEvent(id) {
     let tombstone = null;
-    setAllEvents((prev) =>
-      prev.map((e) => {
-        if (e.id !== id) return e;
-        tombstone = { ...e, deleted: true, updatedAt: nowISO() };
-        return tombstone;
-      }),
-    );
-    if (tombstone) pushOne(tombstone);
+    const next = allRef.current.map((e) => {
+      if (e.id !== id) return e;
+      tombstone = { ...e, deleted: true, updatedAt: nowISO() };
+      return tombstone;
+    });
+    if (!tombstone) return false;
+    if (!commitEvents(next)) return false;
+    pushOne(tombstone);
+    return true;
   }
 
   function getEvent(id) {
     return allEvents.find((e) => e.id === id && !e.deleted) || null;
   }
 
+  // Persistance d'abord : en cas d'échec, on garde le profil précédent (rollback)
+  // et on renvoie false pour ne pas afficher de faux succès (photo incluse).
   function setBaby(next) {
     const stamped = { ...next, updatedAt: nowISO() };
+    const r = persistThenCommit(stamped, saveBaby);
+    if (!r.committed) {
+      setStorageError(STORAGE_FULL_MSG);
+      return false;
+    }
     setBabyState(stamped);
     const hid = householdRef.current?.id;
     if (sync.isSyncConfigured && hid) {
       sync.pushBaby(hid, stamped).catch(() => {});
     }
+    return true;
   }
 
   // ── Synchronisation complète : pull + fusion, puis drainage de l'outbox.
