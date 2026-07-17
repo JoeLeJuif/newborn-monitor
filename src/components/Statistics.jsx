@@ -72,9 +72,9 @@ export default function Statistics({ goBack }) {
         </div>
       ) : (
         <>
-          {/* 1. En-tête Aujourd'hui */}
+          {/* 1. En-tête : derniers événements (pas une fenêtre agrégée) */}
           <section className="stats-card">
-            <h2 className="stats-h2">Aujourd’hui</h2>
+            <h2 className="stats-h2">Derniers événements</h2>
             <HeadRow icon="🍼" label="Dernier boire" ts={d.last.lastFeedTs} />
             <HeadRow icon="💧" label="Dernier pipi" ts={d.last.lastPeeTs} />
             <HeadRow icon="💩" label="Dernière selle" ts={d.last.lastPoopTs} />
@@ -114,6 +114,10 @@ export default function Statistics({ goBack }) {
               color={m.color}
               formatValue={m.fmt}
             />
+            <p className="chart-cap">
+              Un point par jour (heure locale). Le dernier jour est en cours —
+              journée partielle.
+            </p>
           </section>
 
           {/* 4. Intervalles entre les boires */}

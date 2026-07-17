@@ -303,3 +303,13 @@ describe('Dashboard v2 — agrégateur & compat anciennes données', () => {
     expect(d.kpi.feedCount).toBe(1);
   });
 });
+
+describe('Dashboard v2 — bornes jour/nuit exactes', () => {
+  it('06:00 compte en jour, 18:00 compte en nuit', () => {
+    const at6 = feed(-6 * H); // 06:00 aujourd’hui (NOW = 12:00 local)
+    const at18 = feed(-18 * H); // 18:00 la veille
+    const dn = dayNightSplit([at6, at18], NOW - 7 * D, NOW);
+    expect(dn.day).toBe(1); // 06:00 inclus -> jour
+    expect(dn.night).toBe(1); // 18:00 exclu -> nuit
+  });
+});

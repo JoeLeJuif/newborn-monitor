@@ -234,6 +234,7 @@ export function computeInsights(events, now = Date.now()) {
   if (
     cur.avgIntervalMs != null &&
     prev.avgIntervalMs != null &&
+    prev.avgIntervalMs > 0 && // évite division par zéro / Infinity
     cur.feedCount >= 5 &&
     prev.feedCount >= 5
   ) {

@@ -626,7 +626,7 @@ textarea.text-input { resize: vertical; }
   flex-shrink: 0;
 }
 
-/* ── Statistiques ── */
+/* ── Base statistiques (partagée) ── */
 .stats-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -635,80 +635,10 @@ textarea.text-input { resize: vertical; }
   margin-bottom: 14px;
   box-shadow: var(--shadow);
 }
-.stat-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 15px;
-}
-.stat-line:last-child { border-bottom: none; }
-.stat-line strong { font-variant-numeric: tabular-nums; }
-
-.bars { padding: 8px 0 2px; }
-.bar-row {
-  display: grid;
-  grid-template-columns: 8.5em 1fr 2em;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  font-size: 14px;
-}
-.bar-label { color: var(--text-muted); }
-.bar-track {
-  height: 12px;
-  background: var(--surface-alt);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  min-width: 2px;
-  transition: width 0.3s ease;
-}
-.bar-value { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .bar-feed { background: var(--feed); }
 .bar-pee { background: var(--pee); }
 .bar-poop { background: var(--poop); }
-
-.trend-legend {
-  display: flex;
-  gap: 14px;
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 4px 0 10px;
-}
-.trend-legend span { display: inline-flex; align-items: center; gap: 4px; }
 .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
-.trend-day {
-  display: grid;
-  grid-template-columns: 2.6em 1fr;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 0;
-}
-.trend-label { color: var(--text-muted); font-size: 13px; text-transform: capitalize; }
-.trend-bars { display: flex; flex-direction: column; gap: 3px; }
-.trend-bar {
-  position: relative;
-  height: 11px;
-  background: var(--surface-alt);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.trend-bar .bar-fill { position: absolute; inset: 0 auto 0 0; }
-.trend-n {
-  position: absolute;
-  right: 6px;
-  top: -1px;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
 
 /* ── Dashboard statistiques v2 ── */
 .stats-screen { padding-bottom: 24px; }
@@ -736,10 +666,15 @@ textarea.text-input { resize: vertical; }
 .kpi-label { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
 
 .mbars { display: flex; align-items: flex-end; gap: 6px; height: 132px; margin-top: 10px; }
-.mbar-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
-.mbar-v { font-size: 10px; color: var(--text-muted); height: 14px; }
+.mbar-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; height: 100%; }
+.mbar-v {
+  font-size: 10px; color: var(--text-muted); height: 14px;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
+}
 .mbar-track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
-.mbar-fill { width: 100%; border-radius: 6px 6px 0 0; min-height: 2px; }
+/* Pas de min-height : un jour à zéro n'affiche aucune barre (honnête) ;
+   la colonne et son libellé restent visibles. */
+.mbar-fill { width: 100%; border-radius: 6px 6px 0 0; }
 .mbar-x { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; }
 
 .ibars { display: flex; align-items: flex-end; gap: 4px; height: 90px; margin-top: 8px; }
@@ -770,6 +705,11 @@ textarea.text-input { resize: vertical; }
 .heat-cells { display: flex; gap: 2px; margin-top: 8px; }
 .heat-cell { flex: 1; height: 26px; border-radius: 3px; background: var(--feed); }
 .heat-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.heat-legend {
+  display: flex; align-items: center; gap: 5px; margin-top: 8px;
+  font-size: 11px; color: var(--text-muted);
+}
+.heat-legend .heat-cell { flex: 0 0 16px; height: 12px; }
 
 .insights { margin: 0; padding-left: 18px; font-size: 14px; }
 .insights li { padding: 3px 0; }

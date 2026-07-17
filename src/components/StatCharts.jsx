@@ -115,6 +115,13 @@ export function Heatmap({ hours }) {
         <span>18 h</span>
         <span>24 h</span>
       </div>
+      <div className="heat-legend">
+        <span>Moins</span>
+        <span className="heat-cell" style={{ opacity: 0.28 }} aria-hidden="true" />
+        <span className="heat-cell" style={{ opacity: 0.55 }} aria-hidden="true" />
+        <span className="heat-cell" style={{ opacity: 0.85 }} aria-hidden="true" />
+        <span>Plus (max {max})</span>
+      </div>
     </div>
   );
 }
