@@ -33,7 +33,8 @@ export default function HouseholdSetup({ goBack, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
-  const [uploadLocal, setUploadLocal] = useState(true);
+  // Confirmation explicite avant de téléverser les données locales vers un foyer.
+  const [confirmCreate, setConfirmCreate] = useState(false);
   // Choix demandé quand un appareil avec des données rejoint un foyer.
   const [joinChoice, setJoinChoice] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -73,12 +74,24 @@ export default function HouseholdSetup({ goBack, onSaved }) {
     e.target.value = '';
   }
 
-  async function onCreate() {
+  // Clic « Créer un foyer » : s'il y a des données locales, on exige une
+  // confirmation explicite (avec sauvegarde automatique) avant tout téléversement.
+  function onCreateClick() {
+    setError('');
+    if (hasLocalData) setConfirmCreate(true);
+    else onCreate(false);
+  }
+
+  // uploadLocal=true : sauvegarde JSON téléchargée d'abord, puis téléversement.
+  // Les données locales ne sont jamais effacées.
+  async function onCreate(uploadLocal) {
+    setConfirmCreate(false);
+    if (uploadLocal) doExportBackup(); // sauvegarde auto avant migration
     setBusy(true);
     setError('');
     try {
       await createHousehold(uploadLocal);
-      onSaved?.('Foyer créé');
+      onSaved?.(uploadLocal ? 'Foyer créé, données téléversées' : 'Foyer créé');
     } catch {
       setError('Impossible de créer le foyer. Vérifie ta connexion.');
     } finally {
@@ -163,12 +176,14 @@ export default function HouseholdSetup({ goBack, onSaved }) {
     <div className="screen form-screen">
       <header className="form-header">
         <button className="back-btn" onClick={goBack} aria-label="Retour">‹</button>
-        <h1>Synchronisation</h1>
+        <h1>Sauvegarde et migration</h1>
       </header>
 
       {/* Sauvegarde locale, toujours disponible */}
       <div className="card-section" style={{ marginBottom: 18 }}>
-        <label className="field-label">Sauvegarde locale</label>
+        <label className="field-label">
+          Sauvegarde locale — {events.length} événement{events.length > 1 ? 's' : ''} sur cet appareil
+        </label>
         <div className="export-actions">
           <button className="btn btn-secondary" onClick={doExportBackup}>
             ⬇ Exporter une sauvegarde (JSON)
@@ -269,22 +284,17 @@ export default function HouseholdSetup({ goBack, onSaved }) {
           </div>
 
           {hasLocalData && (
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={uploadLocal}
-                onChange={(e) => setUploadLocal(e.target.checked)}
-              />
-              <span>
-                Téléverser les données de cet appareil dans le foyer
-                (recommandé)
-              </span>
-            </label>
+            <p className="help-text">
+              {events.length} événement{events.length > 1 ? 's' : ''} sur cet
+              appareil. En créant un foyer, une sauvegarde JSON sera téléchargée
+              puis ces données seront téléversées. Elles ne seront jamais
+              effacées de cet appareil.
+            </p>
           )}
 
           <button
             className="btn btn-primary btn-save"
-            onClick={onCreate}
+            onClick={onCreateClick}
             disabled={busy}
           >
             ➕ Créer un foyer
@@ -309,6 +319,36 @@ export default function HouseholdSetup({ goBack, onSaved }) {
               Rejoindre
             </button>
           </div>
+
+          {confirmCreate && (
+            <div className="modal-backdrop" onClick={() => setConfirmCreate(false)}>
+              <div
+                className="modal"
+                role="dialog"
+                aria-modal="true"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h2 className="modal-title">Créer un foyer et téléverser</h2>
+                <p className="modal-message">
+                  {`${events.length} événement${events.length > 1 ? 's' : ''} local${events.length > 1 ? 'aux' : ''} trouvé${events.length > 1 ? 's' : ''} sur cet appareil.`}{' '}
+                  Une sauvegarde JSON va d'abord être téléchargée, puis les
+                  données seront téléversées dans le nouveau foyer. Rien n'est
+                  jamais effacé localement.
+                </p>
+                <div className="export-actions">
+                  <button className="btn btn-primary" onClick={() => onCreate(true)}>
+                    Sauvegarder et téléverser
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => onCreate(false)}>
+                    Créer sans téléverser
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => setConfirmCreate(false)}>
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {joinChoice && (
             <div className="modal-backdrop" onClick={() => setJoinChoice(false)}>

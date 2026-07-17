@@ -132,7 +132,7 @@ export default function BabyProfile({ navigate, goBack, onSaved }) {
         style={{ marginTop: 12 }}
         onClick={() => navigate('household')}
       >
-        📱 Synchronisation multi-appareils
+        💾 Sauvegarde et migration
       </button>
     </div>
   );

@@ -29,6 +29,7 @@ import {
   dequeueOutbox,
   loadMigratedFor,
   saveMigratedFor,
+  loadTheme,
   newId,
   getDeviceId,
 } from '../lib/storage.js';
@@ -288,13 +289,17 @@ export function StoreProvider({ children }) {
   }
 
   // ── Sauvegarde locale (JSON) ──
+  // Inclut le profil du bébé et l'historique complet (boires/pipis/cacas avec
+  // dates, heures, durées, quantités, couleurs, textures, notes) + paramètres.
   function exportBackup() {
     return {
       app: 'newborn-monitor',
       version: 1,
       exportedAt: nowISO(),
-      events: allEvents, // tombstones inclus (fidélité complète)
+      deviceId: deviceId.current,
+      settings: { theme: loadTheme() },
       baby,
+      events: allEvents, // tombstones inclus (fidélité complète)
     };
   }
 
