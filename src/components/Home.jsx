@@ -8,6 +8,7 @@ import {
 } from '../lib/time.js';
 import { sideLabel } from '../lib/constants.js';
 import { eventTime } from '../lib/summary.js';
+import QuickActions from './QuickActions.jsx';
 
 function StatCard({ label, value, sub }) {
   return (
@@ -59,38 +60,7 @@ export default function Home({ navigate }) {
         </button>
       </header>
 
-      <div className="big-actions">
-        <button
-          className="big-btn big-feed"
-          onClick={() => navigate('feed')}
-        >
-          <span className="big-emoji" aria-hidden="true">🍼</span>
-          Ajouter un boire
-        </button>
-        <div className="big-row">
-          <button
-            className="big-btn big-pee"
-            onClick={() => navigate('diaper', { preset: 'pee' })}
-          >
-            <span className="big-emoji" aria-hidden="true">💧</span>
-            Pipi
-          </button>
-          <button
-            className="big-btn big-poop"
-            onClick={() => navigate('diaper', { preset: 'poop' })}
-          >
-            <span className="big-emoji" aria-hidden="true">💩</span>
-            Caca
-          </button>
-        </div>
-        <button
-          className="big-btn big-both"
-          onClick={() => navigate('diaper', { preset: 'both' })}
-        >
-          <span className="big-emoji" aria-hidden="true">💧💩</span>
-          Pipi + caca
-        </button>
-      </div>
+      <QuickActions navigate={navigate} />
 
       <section className="dashboard">
         <h2 className="section-title">Depuis le dernier…</h2>

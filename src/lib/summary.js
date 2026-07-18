@@ -66,36 +66,6 @@ export function aggregate(events) {
   return { feeds, breastSec, totalMl, pees, poops, count: events.length };
 }
 
-// Bornes de période pour le résumé.
-export function periodRange(period, ref = Date.now()) {
-  const now = new Date(ref);
-  if (period === 'today') {
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    return { from: start, to: now, label: "Aujourd'hui" };
-  }
-  if (period === '24h') {
-    return { from: now.getTime() - 86400000, to: now, label: 'Dernières 24 h' };
-  }
-  if (period === 'yesterday') {
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start.getTime() - 1);
-    const startY = new Date(start.getTime() - 86400000);
-    return { from: startY, to: end, label: 'Hier' };
-  }
-  if (period === '7d') {
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    return {
-      from: start.getTime() - 6 * 86400000,
-      to: now,
-      label: '7 derniers jours',
-    };
-  }
-  return { from: 0, to: now, label: 'Tout' };
-}
-
 // Statistiques du tableau de bord (dernières 24 h + derniers événements).
 export function dashboardStats(events) {
   const now = Date.now();
