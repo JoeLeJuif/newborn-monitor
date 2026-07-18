@@ -1,19 +1,16 @@
-// Page principale « KPI » : actions rapides puis tableau de bord complet
-// (derniers événements, indicateurs 24 h, tendances et graphiques) sur une
-// seule page — plus besoin d'ouvrir une page « Statistiques » distincte.
+// Page principale « KPI » : page d'analyse (pas d'action). Le tableau de bord
+// complet (derniers événements, indicateurs 24 h, tendances, graphiques,
+// observations) commence directement sous le titre. Les actions rapides restent
+// sur l'Accueil (QuickActions), non dupliquées ici.
 // Composition uniquement : aucun calcul ici (voir KpiDashboard / stats.js).
-import QuickActions from './QuickActions.jsx';
 import KpiDashboard from './KpiDashboard.jsx';
 
-export default function Kpi({ navigate }) {
+export default function Kpi() {
   return (
     <div className="screen">
       <h1 className="page-title">KPI</h1>
 
-      {/* A. Actions rapides — toujours visibles avant les graphiques */}
-      <QuickActions navigate={navigate} />
-
-      {/* B/C/D. Derniers événements, KPI 24 h, tendances et graphiques */}
+      {/* Derniers événements, KPI 24 h, tendances et graphiques, observations */}
       <KpiDashboard />
 
       <p className="disclaimer">
