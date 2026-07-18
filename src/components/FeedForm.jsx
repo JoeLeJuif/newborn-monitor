@@ -1,6 +1,13 @@
 // Formulaire d'enregistrement d'un boire, avec minuterie d'allaitement.
-import { useEffect, useRef, useState } from 'react';
+//
+// La minuterie (mode « Minuterie », boire au sein, nouveau boire) est pilotée
+// par la session GLOBALE (FeedingSessionContext) : elle survit aux changements
+// de page et reste visible via la barre persistante. Les modes « Saisie
+// manuelle », biberon et la modification d'un boire existant restent locaux et
+// enregistrent directement, sans session.
+import { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore.jsx';
+import { useFeedingSession } from '../store/FeedingSessionContext.jsx';
 import {
   FEED_TYPES,
   feedTypeMeta,
@@ -10,8 +17,9 @@ import {
   nowISO,
   toLocalInputValue,
   fromLocalInputValue,
-  formatTimer,
+  formatStopwatch,
 } from '../lib/time.js';
+import { totalMs, isRunning } from '../lib/feedingSession.js';
 
 const ML_QUICK = [15, 30, 60, 90, 120];
 
@@ -20,14 +28,17 @@ const readNow = () => Date.now();
 
 export default function FeedForm({ goBack, editId, onSaved }) {
   const { addEvent, updateEvent, getEvent } = useStore();
+  const feeding = useFeedingSession();
+  const { session } = feeding;
   const existing = editId ? getEvent(editId) : null;
 
-  const [feedType, setFeedType] = useState(existing?.feedType || 'left');
+  const [feedType, setFeedType] = useState(
+    existing?.feedType || session?.feedingType || 'left',
+  );
   const [start, setStart] = useState(existing?.start || nowISO());
   const [amountMl, setAmountMl] = useState(existing?.amountMl || '');
   const [inProgress, setInProgress] = useState(existing?.inProgress || false);
-  const [note, setNote] = useState(existing?.note || '');
-  const [lastSide, setLastSide] = useState(existing?.lastSide || null);
+  const [note, setNote] = useState(existing?.note || session?.note || '');
   const [showTimeEdit, setShowTimeEdit] = useState(false);
   // Mode de saisie : minuterie en direct ou saisie manuelle (événement passé).
   // Par défaut manuel lors d'une modification, minuterie pour un nouveau boire.
@@ -36,72 +47,73 @@ export default function FeedForm({ goBack, editId, onSaved }) {
     existing?.durationSec ? String(Math.round(existing.durationSec / 60)) : '',
   );
 
-  // Minuterie : temps accumulé (s) + segment en cours.
-  const [accumulated, setAccumulated] = useState(existing?.durationSec || 0);
-  const [running, setRunning] = useState(false);
-  const [activeSide, setActiveSide] = useState(null);
-  // Début (ms) du segment en cours, en state pour un rendu pur.
-  const [segStartMs, setSegStartMs] = useState(null);
-  // Horloge locale mise à jour par l'intervalle (évite readNow() au rendu).
+  // Horloge locale mise à jour par l'intervalle (uniquement pour l'affichage).
   const [now, setNow] = useState(() => readNow());
-  const sidesUsed = useRef(new Set());
+  // Verrou visuel pendant la finalisation (en plus de la garde du contexte).
+  const [finishing, setFinishing] = useState(false);
+
+  // Un boire chronométré est déjà en cours et on ouvre un NOUVEAU boire :
+  // on ne crée jamais un second boire en silence (manuel, biberon ou chrono).
+  const sessionActiveHere = !!session && !editId;
 
   const isBreast = feedTypeMeta(feedType).breast;
   const isBottle = feedTypeMeta(feedType).bottle;
 
+  // La minuterie utilise la session globale : nouveau boire, mode minuterie, sein.
+  const timerActive = !editId && entryMode === 'timer' && isBreast;
+  const running = timerActive && isRunning(session);
+  const activeSide = timerActive ? session?.currentSide ?? null : null;
+  const liveSeconds = timerActive && session ? totalMs(session, now) / 1000 : 0;
+  // Heure de début affichée : celle de la session active si présente.
+  const displayStart = timerActive && session ? session.startedAt : start;
+
   // Rafraîchit l'affichage de la minuterie chaque seconde quand elle tourne.
   useEffect(() => {
-    if (!running) return;
+    if (!running) return undefined;
     const id = setInterval(() => setNow(readNow()), 500);
     return () => clearInterval(id);
   }, [running]);
 
-  // Secondes écoulées à un instant donné (fonction pure).
-  function secondsAt(nowMs) {
-    let total = accumulated;
-    if (running && segStartMs) {
-      total += (nowMs - segStartMs) / 1000;
-    }
-    return total;
+  function selectSide(side) {
+    feeding.startOrSwitch(side);
+    setNow(readNow());
   }
 
-  function commitSegment() {
-    if (running && segStartMs) {
-      setAccumulated((a) => a + (readNow() - segStartMs) / 1000);
-    }
-    setSegStartMs(null);
-  }
-
-  function startSide(side) {
-    // Si un premier boire démarre, l'heure de début = maintenant (sauf déjà réglée).
-    if (!running && accumulated === 0 && sidesUsed.current.size === 0) {
-      setStart(nowISO());
-    }
-    commitSegment();
-    sidesUsed.current.add(side);
-    setActiveSide(side);
-    setLastSide(side);
-    setFeedType(sidesUsed.current.size > 1 ? 'both' : side);
-    const t = readNow();
-    setSegStartMs(t);
-    setNow(t);
-    setRunning(true);
-  }
-
-  function pause() {
-    commitSegment();
-    setRunning(false);
+  function pauseOrResume() {
+    if (isRunning(session)) feeding.pause();
+    else feeding.resume();
+    setNow(readNow());
   }
 
   function resetTimer() {
-    commitSegment();
-    setRunning(false);
-    setAccumulated(0);
-    setActiveSide(null);
-    sidesUsed.current = new Set();
+    feeding.cancel();
+    setNow(readNow());
+  }
+
+  function onNoteChange(value) {
+    setNote(value);
+    if (timerActive && session) feeding.updateNote(value);
   }
 
   function save() {
+    // Un boire est déjà en cours : la seule action de création possible est de
+    // le finaliser (jamais un second enregistrement silencieux). Finalisation
+    // unique via la session globale, protégée contre le double déclenchement.
+    if (sessionActiveHere) {
+      if (finishing) return;
+      setFinishing(true);
+      const ev = feeding.finish({ note });
+      if (!ev) {
+        // Échec de persistance : la session est conservée (temps non perdu),
+        // la bannière du store informe. On réautorise une nouvelle tentative.
+        setFinishing(false);
+        return;
+      }
+      onSaved?.('Boire enregistré');
+      goBack();
+      return;
+    }
+
     let durationSec = 0;
     let side = null;
     if (isBreast) {
@@ -110,8 +122,9 @@ export default function FeedForm({ goBack, editId, onSaved }) {
         // En saisie manuelle, le sein vient du type sélectionné.
         side = feedTypeMeta(feedType).side || null;
       } else {
-        durationSec = Math.round(secondsAt(readNow()));
-        side = lastSide;
+        // Mode minuterie sans session active : rien n'a été chronométré.
+        durationSec = 0;
+        side = null;
       }
     } else {
       durationSec = existing?.durationSec || 0;
@@ -132,8 +145,6 @@ export default function FeedForm({ goBack, editId, onSaved }) {
     goBack();
   }
 
-  const liveSeconds = secondsAt(now);
-
   return (
     <div className="screen form-screen">
       <header className="form-header">
@@ -142,6 +153,31 @@ export default function FeedForm({ goBack, editId, onSaved }) {
         </button>
         <h1>{editId ? 'Modifier le boire' : 'Nouveau boire'}</h1>
       </header>
+
+      {sessionActiveHere && (
+        <div className="inline-notice" role="status">
+          <span>Un boire chronométré est déjà en cours.</span>
+          <div className="inline-notice-actions">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setEntryMode('timer');
+                setFeedType(session.feedingType || 'left');
+              }}
+            >
+              Revenir au boire en cours
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => feeding.cancel()}
+            >
+              Annuler le boire en cours
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mode-switch" role="tablist" aria-label="Mode de saisie">
         <button
@@ -156,10 +192,7 @@ export default function FeedForm({ goBack, editId, onSaved }) {
           role="tab"
           aria-selected={entryMode === 'manual'}
           className={`mode-btn ${entryMode === 'manual' ? 'mode-active' : ''}`}
-          onClick={() => {
-            setRunning(false);
-            setEntryMode('manual');
-          }}
+          onClick={() => setEntryMode('manual')}
         >
           ✎ Saisie manuelle
         </button>
@@ -180,44 +213,43 @@ export default function FeedForm({ goBack, editId, onSaved }) {
 
       {isBreast && entryMode === 'timer' && (
         <div className="timer-card">
-          <div className="timer-display">{formatTimer(liveSeconds)}</div>
+          <div className="timer-display">{formatStopwatch(liveSeconds)}</div>
           <div className="timer-side-label">
-            {activeSide === 'left' && 'Sein gauche en cours'}
-            {activeSide === 'right' && 'Sein droit en cours'}
+            {activeSide === 'left' && (running ? 'Sein gauche en cours' : 'Sein gauche · en pause')}
+            {activeSide === 'right' && (running ? 'Sein droit en cours' : 'Sein droit · en pause')}
             {!activeSide && 'Choisir un sein pour démarrer'}
           </div>
           <div className="timer-sides">
             <button
               className={`side-btn ${activeSide === 'left' ? 'side-active' : ''}`}
-              onClick={() => startSide('left')}
+              onClick={() => selectSide('left')}
             >
               Gauche
             </button>
             <button
               className={`side-btn ${activeSide === 'right' ? 'side-active' : ''}`}
-              onClick={() => startSide('right')}
+              onClick={() => selectSide('right')}
             >
               Droit
             </button>
           </div>
           <div className="timer-controls">
             {running ? (
-              <button className="btn btn-ghost" onClick={pause}>
+              <button className="btn btn-ghost" onClick={pauseOrResume}>
                 ⏸ Pause
               </button>
             ) : (
               activeSide && (
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => startSide(activeSide)}
-                >
+                <button className="btn btn-ghost" onClick={pauseOrResume}>
                   ▶ Reprendre
                 </button>
               )
             )}
-            <button className="btn btn-ghost" onClick={resetTimer}>
-              ↺ Réinitialiser
-            </button>
+            {session && (
+              <button className="btn btn-ghost" onClick={resetTimer}>
+                ↺ Annuler
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -279,20 +311,25 @@ export default function FeedForm({ goBack, editId, onSaved }) {
             className="link-btn"
             onClick={() => setShowTimeEdit((v) => !v)}
           >
-            🕑 Heure de début : {new Date(start).toLocaleString('fr-CA', {
+            🕑 Heure de début : {new Date(displayStart).toLocaleString('fr-CA', {
               day: 'numeric',
               month: 'short',
               hour: '2-digit',
               minute: '2-digit',
             })} {showTimeEdit ? '▲' : '▼'}
           </button>
-          {showTimeEdit && (
+          {showTimeEdit && !timerActive && (
             <input
               className="text-input"
               type="datetime-local"
               value={toLocalInputValue(start)}
               onChange={(e) => setStart(fromLocalInputValue(e.target.value))}
             />
+          )}
+          {showTimeEdit && timerActive && (
+            <p className="help-text">
+              L'heure de début est fixée au démarrage de la minuterie.
+            </p>
           )}
         </div>
       )}
@@ -313,7 +350,7 @@ export default function FeedForm({ goBack, editId, onSaved }) {
             <button
               key={n}
               className={`chip ${note === n ? 'chip-active' : ''}`}
-              onClick={() => setNote(note === n ? '' : n)}
+              onClick={() => onNoteChange(note === n ? '' : n)}
             >
               {n}
             </button>
@@ -324,12 +361,21 @@ export default function FeedForm({ goBack, editId, onSaved }) {
           rows={2}
           placeholder="Ajouter une note…"
           value={note}
-          onChange={(e) => setNote(e.target.value)}
+          onChange={(e) => onNoteChange(e.target.value)}
         />
       </div>
 
-      <button className="btn btn-primary btn-save" onClick={save}>
-        {editId ? 'Enregistrer les modifications' : 'Enregistrer le boire'}
+      <button
+        className="btn btn-primary btn-save"
+        onClick={save}
+        disabled={sessionActiveHere && finishing}
+        aria-busy={sessionActiveHere && finishing}
+      >
+        {editId
+          ? 'Enregistrer les modifications'
+          : sessionActiveHere
+            ? 'Terminer le boire'
+            : 'Enregistrer le boire'}
       </button>
     </div>
   );
