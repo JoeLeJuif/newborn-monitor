@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StoreProvider, useStore } from './store/useStore.jsx';
+import { FeedingSessionProvider, useFeedingSession } from './store/FeedingSessionContext.jsx';
 import { loadTheme, saveTheme } from './lib/storage.js';
 import Home from './components/Home.jsx';
 import FeedForm from './components/FeedForm.jsx';
@@ -11,6 +12,7 @@ import BabyProfile from './components/BabyProfile.jsx';
 import HouseholdSetup from './components/HouseholdSetup.jsx';
 import ExportShare from './components/ExportShare.jsx';
 import BottomNav from './components/BottomNav.jsx';
+import ActiveFeedingBar from './components/ActiveFeedingBar.jsx';
 import Toast from './components/Toast.jsx';
 import './App.css';
 
@@ -99,9 +101,14 @@ function App() {
   }
 
   const showNav = TAB_VIEWS.includes(current.name);
+  const { isActive: feedingActive } = useFeedingSession();
+  // La barre persistante s'affiche sur les vues à onglets (au-dessus de la nav).
+  const showFeedingBar = showNav && feedingActive;
 
   return (
-    <div className={`app ${showNav ? 'with-nav' : ''}`}>
+    <div
+      className={`app ${showNav ? 'with-nav' : ''} ${showFeedingBar ? 'with-feeding-bar' : ''}`}
+    >
       <button
         className="theme-toggle"
         onClick={() => setTheme((t) => THEME_ORDER[t])}
@@ -114,6 +121,9 @@ function App() {
       <StorageBanner />
       <main className="app-main">{render()}</main>
 
+      {showFeedingBar && (
+        <ActiveFeedingBar navigate={navigate} onFinished={showToast} />
+      )}
       {showNav && <BottomNav current={current.name} navigate={navigate} />}
       <Toast message={toast} />
     </div>
@@ -135,7 +145,9 @@ function StorageBanner() {
 export default function AppRoot() {
   return (
     <StoreProvider>
-      <App />
+      <FeedingSessionProvider>
+        <App />
+      </FeedingSessionProvider>
     </StoreProvider>
   );
 }

@@ -38,6 +38,17 @@ export function formatTimer(totalSec) {
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
+// Chronomètre lisible -> "MM:SS", ou "H:MM:SS" au-delà d'une heure.
+export function formatStopwatch(totalSec) {
+  const s = Math.max(0, Math.round(totalSec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  if (h > 0) return `${h}:${pad(m)}:${pad(sec)}`;
+  return `${pad(m)}:${pad(sec)}`;
+}
+
 // Temps écoulé depuis une date -> "il y a 2 h 15" ; renvoie "—" si absent.
 export function elapsedSince(iso) {
   if (!iso) return '—';

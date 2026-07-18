@@ -744,6 +744,72 @@ textarea.text-input { resize: vertical; }
 .nav-icon { font-size: 22px; }
 .nav-active { color: var(--primary); font-weight: 700; }
 
+/* ── Barre persistante « boire en cours » (au-dessus de la nav basse) ── */
+.app.with-feeding-bar .app-main {
+  /* espace pour la nav (~64 px) + la barre (~66 px) + marge */
+  padding-bottom: 156px;
+}
+.feeding-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--feed-soft);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06);
+  z-index: 29;
+}
+.feeding-bar-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  padding: 4px;
+  min-height: 44px;
+}
+.fb-ico { font-size: 24px; flex-shrink: 0; }
+.fb-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.fb-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--feed);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fb-sub {
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fb-timer { font-variant-numeric: tabular-nums; }
+.fb-warn { font-size: 11px; color: var(--poop); }
+.feeding-bar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.fb-btn {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.fb-switch { background: var(--surface); color: var(--text); }
+.fb-finish { background: var(--feed); color: #fff; border-color: var(--feed); }
+
 /* ── Toast ── */
 .toast {
   position: fixed;
