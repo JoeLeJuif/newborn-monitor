@@ -11,6 +11,7 @@ import { sideLabel } from '../lib/constants.js';
 export default function ActiveFeedingBar({ navigate, onFinished }) {
   const { session, startOrSwitch, finish } = useFeedingSession();
   const [now, setNow] = useState(() => Date.now());
+  const [finishing, setFinishing] = useState(false);
 
   const active = !!session;
   useEffect(() => {
@@ -27,8 +28,12 @@ export default function ActiveFeedingBar({ navigate, onFinished }) {
   const otherSide = session.currentSide === 'right' ? 'left' : 'right';
 
   const handleFinish = () => {
+    if (finishing) return;
+    setFinishing(true);
     const ev = finish();
     if (ev) onFinished?.('Boire enregistré');
+    // Échec : la session est conservée ; on réautorise une nouvelle tentative.
+    else setFinishing(false);
   };
 
   return (
@@ -72,6 +77,8 @@ export default function ActiveFeedingBar({ navigate, onFinished }) {
           type="button"
           className="fb-btn fb-finish"
           onClick={handleFinish}
+          disabled={finishing}
+          aria-busy={finishing}
           aria-label="Terminer le boire"
         >
           Terminer

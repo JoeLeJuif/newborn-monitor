@@ -206,3 +206,65 @@ describe('données sans côté (robustesse)', () => {
     expect(ev.lastSide).toBe('left');
   });
 });
+
+describe('nouveau boire pendant une session active (pas de seconde session)', () => {
+  it('startOrSwitchSide sur une session existante conserve le même sessionId', () => {
+    const s = createSession('left', T0);
+    const s2 = startOrSwitchSide(s, 'right', T0 + 2 * MIN);
+    // Même session (aucune seconde session chronométrée créée en parallèle).
+    expect(s2.sessionId).toBe(s.sessionId);
+    expect(s2.startedAt).toBe(s.startedAt);
+  });
+});
+
+describe('échec de finalisation : la session n’est pas perdue', () => {
+  it('finalizeToEvent est pure et ne modifie pas la session (peut être conservée)', () => {
+    const s = createSession('left', T0);
+    const snapshot = JSON.parse(JSON.stringify(s));
+    const ev = finalizeToEvent(s, T0 + 3 * MIN);
+    expect(ev).not.toBeNull();
+    // La session d'origine est intacte : si addEvent échoue, on peut la garder.
+    expect(s).toEqual(snapshot);
+  });
+});
+
+describe('double finalisation : un seul événement', () => {
+  it('après finalisation (session vidée), un second appel renvoie null', () => {
+    let s = createSession('left', T0);
+    const first = finalizeToEvent(s, T0 + 60 * S);
+    expect(first).not.toBeNull();
+    // La barre/formulaire supprime la session après succès -> second appel null.
+    s = null;
+    const second = finalizeToEvent(s, T0 + 61 * S);
+    expect(second).toBeNull();
+  });
+});
+
+describe('startedAt final exact + total = gauche + droite', () => {
+  it('startedAt = début réel (pas l’heure de finalisation) et durée = G + D', () => {
+    let s = createSession('left', T0);
+    s = startOrSwitchSide(s, 'right', T0 + 4 * MIN); // 4 min gauche
+    // finalisation bien plus tard : 6 min à droite
+    const nowMs = T0 + 10 * MIN;
+    const left = elapsedLeftMs(s, nowMs);
+    const right = elapsedRightMs(s, nowMs);
+    const ev = finalizeToEvent(s, nowMs);
+    expect(ev.start).toBe(new Date(T0).toISOString()); // début réel, pas nowMs
+    expect(left).toBe(4 * MIN);
+    expect(right).toBe(6 * MIN);
+    expect(ev.durationSec).toBe(Math.round((left + right) / 1000)); // total = G + D
+    expect(ev.durationSec).toBe(10 * 60);
+  });
+});
+
+describe('notes conservées après navigation / restauration', () => {
+  it('la note saisie survit à la persistance et se retrouve à la finalisation', () => {
+    let s = createSession('left', T0);
+    s = setSessionNote(s, "Bébé s'est endormi");
+    saveActiveFeeding(s); // navigation : la session est persistée
+    const restored = loadActiveFeeding(); // retour / rechargement
+    expect(restored.note).toBe("Bébé s'est endormi");
+    const ev = finalizeToEvent(restored, T0 + 5 * MIN);
+    expect(ev.note).toBe("Bébé s'est endormi");
+  });
+});

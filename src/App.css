@@ -810,6 +810,32 @@ textarea.text-input { resize: vertical; }
 .fb-switch { background: var(--surface); color: var(--text); }
 .fb-finish { background: var(--feed); color: #fff; border-color: var(--feed); }
 
+/* Écrans très étroits : la barre s'organise sur deux lignes sans débordement. */
+@media (max-width: 360px) {
+  .feeding-bar { flex-wrap: wrap; }
+  .feeding-bar-open { flex-basis: 100%; }
+  .feeding-bar-actions { width: 100%; justify-content: flex-end; }
+  .app.with-feeding-bar .app-main { padding-bottom: 200px; }
+}
+
+/* Avis en ligne (ex. « un boire est déjà en cours »). */
+.inline-notice {
+  background: var(--pee-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  color: var(--text);
+}
+.inline-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.inline-notice-actions .btn { min-height: 44px; }
+
 /* ── Toast ── */
 .toast {
   position: fixed;

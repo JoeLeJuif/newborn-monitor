@@ -49,6 +49,12 @@ export default function FeedForm({ goBack, editId, onSaved }) {
 
   // Horloge locale mise à jour par l'intervalle (uniquement pour l'affichage).
   const [now, setNow] = useState(() => readNow());
+  // Verrou visuel pendant la finalisation (en plus de la garde du contexte).
+  const [finishing, setFinishing] = useState(false);
+
+  // Un boire chronométré est déjà en cours et on ouvre un NOUVEAU boire :
+  // on ne crée jamais un second boire en silence (manuel, biberon ou chrono).
+  const sessionActiveHere = !!session && !editId;
 
   const isBreast = feedTypeMeta(feedType).breast;
   const isBottle = feedTypeMeta(feedType).bottle;
@@ -90,10 +96,19 @@ export default function FeedForm({ goBack, editId, onSaved }) {
   }
 
   function save() {
-    // Boire chronométré en cours : finalisation unique via la session globale.
-    if (timerActive && session) {
+    // Un boire est déjà en cours : la seule action de création possible est de
+    // le finaliser (jamais un second enregistrement silencieux). Finalisation
+    // unique via la session globale, protégée contre le double déclenchement.
+    if (sessionActiveHere) {
+      if (finishing) return;
+      setFinishing(true);
       const ev = feeding.finish({ note });
-      if (!ev) return; // échec de persistance : la bannière informe
+      if (!ev) {
+        // Échec de persistance : la session est conservée (temps non perdu),
+        // la bannière du store informe. On réautorise une nouvelle tentative.
+        setFinishing(false);
+        return;
+      }
       onSaved?.('Boire enregistré');
       goBack();
       return;
@@ -138,6 +153,31 @@ export default function FeedForm({ goBack, editId, onSaved }) {
         </button>
         <h1>{editId ? 'Modifier le boire' : 'Nouveau boire'}</h1>
       </header>
+
+      {sessionActiveHere && (
+        <div className="inline-notice" role="status">
+          <span>Un boire chronométré est déjà en cours.</span>
+          <div className="inline-notice-actions">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setEntryMode('timer');
+                setFeedType(session.feedingType || 'left');
+              }}
+            >
+              Revenir au boire en cours
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => feeding.cancel()}
+            >
+              Annuler le boire en cours
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mode-switch" role="tablist" aria-label="Mode de saisie">
         <button
@@ -325,10 +365,15 @@ export default function FeedForm({ goBack, editId, onSaved }) {
         />
       </div>
 
-      <button className="btn btn-primary btn-save" onClick={save}>
+      <button
+        className="btn btn-primary btn-save"
+        onClick={save}
+        disabled={sessionActiveHere && finishing}
+        aria-busy={sessionActiveHere && finishing}
+      >
         {editId
           ? 'Enregistrer les modifications'
-          : timerActive && session
+          : sessionActiveHere
             ? 'Terminer le boire'
             : 'Enregistrer le boire'}
       </button>
