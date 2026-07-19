@@ -18,14 +18,47 @@ function ts(ev) {
   return new Date(eventTime(ev)).getTime();
 }
 
-// Événements actifs, valides et compris dans [fromMs, toMs].
+// Prédicat unique « événement exploitable par les KPI ». Source de vérité
+// partagée par TOUS les calculs de ce fichier, pour éviter que les filtres
+// divergent silencieusement.
+//
+// Exclut : entrées nulles, tombstones (deleted), types hors KPI, horodatage
+// invalide, et les boires EN COURS (inProgress) dont la durée n'est pas encore
+// définitive. Un boire en cours reste visible dans l'Historique et dans
+// l'éditeur d'événement ; il n'est simplement jamais agrégé.
+//
+// Compatibilité : le test est `inProgress === true` (strict), donc les anciens
+// événements dépourvus du champ restent inclus.
+export function isKpiEvent(e) {
+  if (!e || e.deleted) return false;
+  if (e.type !== 'feed' && e.type !== 'diaper') return false;
+  if (e.type === 'feed' && e.inProgress === true) return false;
+  return Number.isFinite(ts(e));
+}
+
+// Liste filtrée réutilisable (l'entrée n'est jamais mutée).
+export function kpiEvents(events) {
+  return (Array.isArray(events) ? events : []).filter(isKpiEvent);
+}
+
+// Événements exploitables compris dans [fromMs, toMs].
 function inWindow(events, fromMs, toMs) {
-  return events.filter((e) => {
-    if (!e || e.deleted) return false;
-    if (e.type !== 'feed' && e.type !== 'diaper') return false;
+  return kpiEvents(events).filter((e) => {
     const t = ts(e);
-    return Number.isFinite(t) && t >= fromMs && t <= toMs;
+    return t >= fromMs && t <= toMs;
   });
+}
+
+// Dernier boire exploitable STRICTEMENT antérieur à fromMs. Sert d'ancre pour
+// que le premier intervalle d'une fenêtre ne soit pas perdu (cf. windowStats).
+function lastFeedBefore(events, fromMs) {
+  let best = null;
+  for (const e of kpiEvents(events)) {
+    if (e.type !== 'feed') continue;
+    const t = ts(e);
+    if (t < fromMs && (best == null || t > best)) best = t;
+  }
+  return best;
 }
 
 function mean(values) {
@@ -54,13 +87,26 @@ export function windowStats(events, fromMs, toMs, dayCount) {
     .map((e) => (e.amountMl == null ? null : Number(e.amountMl)))
     .filter((v) => Number.isFinite(v));
 
-  // Intervalle moyen entre boires (par heure de début, ordre croissant).
-  const feedTimes = feeds.map(ts).filter(Number.isFinite).sort((a, b) => a - b);
+  // Intervalles entre boires, mesurés DÉBUT → DÉBUT. Définition conservée pour
+  // ce sprint ; le temps de jeûne réel (fin → début) relève d'une décision
+  // produit distincte.
+  //
+  // Correction du biais de bord : sans ancre, le premier boire de la fenêtre n'a
+  // pas de prédécesseur, et l'écart qui « entre » dans la fenêtre est perdu. Un
+  // jeûne nocturne disparaissait donc de « Plus long intervalle » dès que le
+  // boire qui le précédait sortait de la fenêtre — la valeur changeait selon
+  // l'heure de consultation. On ancre sur le dernier boire exploitable
+  // antérieur à fromMs. La même liste d'écarts sert à la moyenne ET au maximum,
+  // pour qu'ils restent cohérents entre eux.
+  const feedTimes = feeds.map(ts).sort((a, b) => a - b);
+  const anchorTs = lastFeedBefore(events, fromMs);
+  const gapTimes = anchorTs == null ? feedTimes : [anchorTs, ...feedTimes];
+
   let avgIntervalMs = null;
   let longestIntervalMs = null;
-  if (feedTimes.length >= 2) {
+  if (gapTimes.length >= 2) {
     const gaps = [];
-    for (let i = 1; i < feedTimes.length; i += 1) gaps.push(feedTimes[i] - feedTimes[i - 1]);
+    for (let i = 1; i < gapTimes.length; i += 1) gaps.push(gapTimes[i] - gapTimes[i - 1]);
     avgIntervalMs = mean(gaps);
     longestIntervalMs = Math.max(...gaps);
   }
@@ -84,6 +130,7 @@ export function windowStats(events, fromMs, toMs, dayCount) {
 
   return {
     feedCount: feeds.length,
+    diaperCount: diapers.length, // couches enregistrées (seuil de comparaison)
     breastSec, // total au sein (s)
     avgDurationSec: mean(durations), // null si aucune durée
     totalMl: amounts.reduce((a, b) => a + b, 0),
@@ -110,11 +157,8 @@ export function weeklyTrend(events, now = Date.now()) {
     days.push({ key: dayKey(d.toISOString()), date: d, feeds: 0, breastSec: 0, pees: 0, poops: 0 });
   }
   const byKey = new Map(days.map((d) => [d.key, d]));
-  for (const e of events) {
-    if (!e || e.deleted) continue;
-    if (e.type !== 'feed' && e.type !== 'diaper') continue;
+  for (const e of kpiEvents(events)) {
     const t = ts(e);
-    if (!Number.isFinite(t)) continue;
     const bucket = byKey.get(dayKey(new Date(t).toISOString()));
     if (!bucket) continue;
     if (e.type === 'feed') {
@@ -146,20 +190,19 @@ export function computeStats(events, now = Date.now()) {
 
 // Horodatage du dernier boire / pipi / selle (null si aucun).
 export function lastEvents(events) {
-  const active = (events || []).filter((e) => e && !e.deleted);
+  const active = kpiEvents(events);
   const maxTs = (arr) => (arr.length ? Math.max(...arr) : null);
-  const feed = active.filter((e) => e.type === 'feed').map(ts).filter(Number.isFinite);
-  const pee = active.filter((e) => e.type === 'diaper' && e.pee).map(ts).filter(Number.isFinite);
-  const poop = active.filter((e) => e.type === 'diaper' && e.poop).map(ts).filter(Number.isFinite);
+  const feed = active.filter((e) => e.type === 'feed').map(ts);
+  const pee = active.filter((e) => e.type === 'diaper' && e.pee).map(ts);
+  const poop = active.filter((e) => e.type === 'diaper' && e.poop).map(ts);
   return { lastFeedTs: maxTs(feed), lastPeeTs: maxTs(pee), lastPoopTs: maxTs(poop) };
 }
 
 // Évolution des intervalles : jusqu'aux `maxPoints` derniers écarts entre boires.
 export function feedIntervalSeries(events, maxPoints = 12) {
-  const feeds = (events || [])
-    .filter((e) => e && !e.deleted && e.type === 'feed')
+  const feeds = kpiEvents(events)
+    .filter((e) => e.type === 'feed')
     .map(ts)
-    .filter(Number.isFinite)
     .sort((a, b) => a - b);
   const gaps = [];
   for (let i = 1; i < feeds.length; i += 1) gaps.push({ ts: feeds[i], gapMs: feeds[i] - feeds[i - 1] });
@@ -186,24 +229,60 @@ export function dayNightSplit(events, fromMs, toMs) {
   };
 }
 
-// Répartition de la DURÉE au sein gauche / droit (les deux = 50/50).
+// Répartition de la DURÉE au sein entre gauche et droite.
+//
+// Stratégie de repli explicite, par ordre de priorité :
+//   1. EXACT   — leftDurationSec / rightDurationSec, écrits à la finalisation
+//                de la minuterie depuis accumulatedLeftMs / accumulatedRightMs ;
+//   2. REPLI   — feedType 'both' sans détail : 50/50 assumé ;
+//   3. REPLI   — feedType unilatéral : toute la durée au côté concerné ;
+//   4. sinon, l'événement est ignoré (durée absente ou nulle).
+//
+// `lastSide` n'est JAMAIS consulté ici : il n'indique que le DERNIER côté téré,
+// pas la répartition. S'y fier attribuait 100 % du temps d'une session « les
+// deux seins » à un seul côté — la cause du faux « côté dominant ».
+//
+// Le champ `estimated` permet à l'appelant de ne pas présenter comme mesuré ce
+// qui a été déduit du type de boire.
 export function sideSplit(events, fromMs, toMs) {
   const feeds = inWindow(events, fromMs, toMs).filter(
     (e) => e.type === 'feed' && feedTypeMeta(e.feedType).breast,
   );
   let left = 0;
   let right = 0;
+  let exactLeft = 0;
+  let exactRight = 0;
+  let estimatedSec = 0;
+
   for (const e of feeds) {
+    const exL = Number(e.leftDurationSec);
+    const exR = Number(e.rightDurationSec);
+    const hasExact =
+      Number.isFinite(exL) && Number.isFinite(exR) && exL >= 0 && exR >= 0 && exL + exR > 0;
+
+    if (hasExact) {
+      left += exL;
+      right += exR;
+      exactLeft += exL;
+      exactRight += exR;
+      continue;
+    }
+
     const d = Number(e.durationSec);
     if (!Number.isFinite(d) || d <= 0) continue;
-    const side = e.lastSide || feedTypeMeta(e.feedType).side;
+
+    // Le filtre `breast` ci-dessus garantit un feedType connu, donc un `side`
+    // défini parmi 'left' | 'right' | 'both'.
+    const side = feedTypeMeta(e.feedType).side;
     if (side === 'left') left += d;
     else if (side === 'right') right += d;
     else if (side === 'both') {
       left += d / 2;
       right += d / 2;
-    }
+    } else continue;
+    estimatedSec += d;
   }
+
   const total = left + right;
   return {
     leftSec: left,
@@ -211,6 +290,12 @@ export function sideSplit(events, fromMs, toMs) {
     total,
     leftPct: total ? left / total : null,
     rightPct: total ? right / total : null,
+    // Sous-ensemble réellement mesuré (aucune estimation).
+    exactLeftSec: exactLeft,
+    exactRightSec: exactRight,
+    exactTotal: exactLeft + exactRight,
+    estimatedSec,
+    estimated: estimatedSec > 0,
   };
 }
 
@@ -223,6 +308,13 @@ export function hourlyActivity(events, fromMs, toMs) {
   }
   return hours;
 }
+
+// Nombre minimal de couches enregistrées, dans CHACUNE des deux périodes
+// comparées (7 jours chacune), avant d'oser une comparaison. 5 couches sur 7
+// jours reste très en dessous d'un rythme normal de nouveau-né : le seuil ne
+// filtre donc que les périodes manifestement peu ou pas saisies, sans exiger
+// une saisie exhaustive.
+export const MIN_DIAPERS_FOR_COMPARISON = 5;
 
 // Jusqu'à 3 observations calculées (aucune conclusion médicale). Rien si les
 // données sont insuffisantes.
@@ -253,20 +345,53 @@ export function computeInsights(events, now = Date.now()) {
     }
   }
 
+  // Côté dominant : priorité absolue aux durées mesurées. À défaut, l'estimation
+  // reste possible mais doit être annoncée comme telle.
   const ss = sideSplit(events, now - 7 * DAY_MS, now);
-  if (cur.feedCount >= 5 && ss.total > 0) {
-    const domPct = Math.max(ss.leftPct, ss.rightPct);
-    if (domPct >= 0.65) {
-      out.push(`Côté ${ss.leftPct >= ss.rightPct ? 'gauche' : 'droit'} nettement dominant (${Math.round(domPct * 100)} %).`);
+  if (cur.feedCount >= 5) {
+    const useExact = ss.exactTotal > 0;
+    const l = useExact ? ss.exactLeftSec : ss.leftSec;
+    const r = useExact ? ss.exactRightSec : ss.rightSec;
+    const tot = l + r;
+    if (tot > 0) {
+      const domPct = Math.max(l, r) / tot;
+      if (domPct >= 0.65) {
+        const cote = l >= r ? 'gauche' : 'droit';
+        const pct = Math.round(domPct * 100);
+        out.push(
+          useExact
+            ? `Côté ${cote} nettement dominant (${pct} %).`
+            : `Côté ${cote} nettement dominant (${pct} %, estimation).`,
+        );
+      }
     }
   }
 
-  if (cur.feedCount >= 5 && prev.feedCount >= 5) {
-    const peeDiff = Math.abs((cur.peesPerDay ?? 0) - (prev.peesPerDay ?? 0));
-    const poopDiff = Math.abs((cur.poopsPerDay ?? 0) - (prev.poopsPerDay ?? 0));
+  // Couches : ne jamais lire une absence de saisie comme un zéro. Sans volume
+  // minimal dans CHACUNE des deux périodes, « 0 cette semaine vs 0 la semaine
+  // dernière » produirait un message faussement rassurant — or l'absence de
+  // pipi est justement ce qu'il ne faut pas noyer.
+  const curD = cur.diaperCount;
+  const prevD = prev.diaperCount;
+  const bothPeriodsUsable =
+    curD >= MIN_DIAPERS_FOR_COMPARISON &&
+    prevD >= MIN_DIAPERS_FOR_COMPARISON &&
+    Number.isFinite(cur.peesPerDay) &&
+    Number.isFinite(prev.peesPerDay) &&
+    Number.isFinite(cur.poopsPerDay) &&
+    Number.isFinite(prev.poopsPerDay);
+
+  if (bothPeriodsUsable) {
+    const peeDiff = Math.abs(cur.peesPerDay - prev.peesPerDay);
+    const poopDiff = Math.abs(cur.poopsPerDay - prev.poopsPerDay);
     if (peeDiff <= 1 && poopDiff <= 1) {
-      out.push('Pipis et selles stables par rapport à la semaine dernière.');
+      // Formulation descriptive : un comptage, pas un avis.
+      out.push('Nombre de couches comparable à la semaine précédente.');
     }
+  } else if (curD + prevD > 0) {
+    // Des couches existent, mais pas assez pour comparer : on le dit plutôt que
+    // de laisser croire à une stabilité.
+    out.push('Données insuffisantes pour comparer les couches.');
   }
 
   return out.slice(0, 3);
@@ -278,6 +403,7 @@ export function computeDashboard(events, now = Date.now()) {
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
   const from7 = start.getTime() - 6 * DAY_MS;
+  const hourly = hourlyActivity(list, from7, now);
   return {
     last: lastEvents(list),
     kpi: windowStats(list, now - DAY_MS, now, 1),
@@ -285,7 +411,9 @@ export function computeDashboard(events, now = Date.now()) {
     intervals: feedIntervalSeries(list, 12),
     dayNight: dayNightSplit(list, from7, now),
     side: sideSplit(list, from7, now),
-    hourly: hourlyActivity(list, from7, now),
+    hourly,
+    // Total pré-calculé : évite une réduction dans le composant.
+    hourlyTotal: hourly.reduce((a, b) => a + b, 0),
     insights: computeInsights(list, now),
   };
 }

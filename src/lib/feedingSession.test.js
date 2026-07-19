@@ -123,8 +123,31 @@ describe('finalisation (barre ou formulaire) : un seul événement', () => {
       amountMl: null,
       inProgress: false,
       lastSide: 'right',
+      // Durées exactes par côté (additives) : 5 min à gauche, 3 min à droite.
+      leftDurationSec: 5 * 60,
+      rightDurationSec: 3 * 60,
       note: 'ok',
     });
+  });
+
+  it('les champs historiques restent inchangés par l’ajout des durées par côté', () => {
+    let s = createSession('left', T0);
+    s = startOrSwitchSide(s, 'right', T0 + 5 * MIN);
+    const ev = finalizeToEvent(s, T0 + 8 * MIN);
+    // Contrat de compatibilité : ces trois champs pilotent l'affichage existant
+    // et les anciennes statistiques ; ils ne doivent pas bouger.
+    expect(ev.start).toBe(new Date(T0).toISOString());
+    expect(ev.durationSec).toBe(8 * 60);
+    expect(ev.lastSide).toBe('right');
+    expect(ev.feedType).toBe('both');
+  });
+
+  it('durées par côté cohérentes avec la durée totale (session unilatérale)', () => {
+    const s = createSession('left', T0);
+    const ev = finalizeToEvent(s, T0 + 7 * MIN);
+    expect(ev.leftDurationSec).toBe(7 * 60);
+    expect(ev.rightDurationSec).toBe(0);
+    expect(ev.durationSec).toBe(7 * 60);
   });
 
   it('finaliser une session absente renvoie null (garde double-clic)', () => {

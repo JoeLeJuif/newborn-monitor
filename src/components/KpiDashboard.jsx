@@ -1,7 +1,7 @@
 // Tableau de bord KPI (mobile-first), réutilisable et sans page distincte.
 // Tous les calculs viennent de src/lib/stats.js ; tous les graphiques de
 // StatCharts.jsx. Ne modifie aucune donnée ; ignore les tombstones (via stats).
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/useStore.jsx';
 import { computeDashboard } from '../lib/stats.js';
 import { formatDuration, formatTime, elapsedSince } from '../lib/time.js';
@@ -9,7 +9,20 @@ import { Donut, SplitBar, MetricBars, IntervalBars, Heatmap } from './StatCharts
 
 const iso = (t) => (t == null ? null : new Date(t).toISOString());
 const fmtClock = (t) => (t == null ? '—' : formatTime(iso(t)));
-const fmtElapsed = (t) => (t == null ? 'aucun' : elapsedSince(iso(t)));
+const fmtElapsed = (t, nowMs) => (t == null ? 'aucun' : elapsedSince(iso(t), nowMs));
+
+// Rafraîchit uniquement l'AFFICHAGE des durées écoulées (« il y a 2 h 15 »),
+// qui sinon se figeraient tant qu'aucun événement n'est ajouté. Une minute
+// suffit : la plus petite unité affichée est la minute. Ce tick ne recalcule
+// aucune statistique — computeDashboard reste mémoïsé sur `events`.
+function useMinuteTick(intervalMs = 60000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
 const fmtDur = (sec) => (sec == null ? '—' : formatDuration(Math.round(sec)));
 const fmtInterval = (ms) => (ms == null ? '—' : formatDuration(Math.round(ms / 1000)));
 const fmtPct = (x) => (x == null ? '—' : `${Math.round(x * 100)} %`);
@@ -33,14 +46,14 @@ function Kpi({ label, value, unit }) {
   );
 }
 
-function HeadRow({ icon, label, ts }) {
+function HeadRow({ icon, label, ts, nowMs }) {
   return (
     <div className="head-row">
       <span className="head-ico" aria-hidden="true">{icon}</span>
       <span className="head-label">{label}</span>
       <span className="head-val">
         <strong>{fmtClock(ts)}</strong>
-        <em>{fmtElapsed(ts)}</em>
+        <em>{fmtElapsed(ts, nowMs)}</em>
       </span>
     </div>
   );
@@ -51,6 +64,7 @@ const dayNarrow = (d) => d.date.toLocaleDateString('fr-CA', { weekday: 'narrow' 
 export default function KpiDashboard() {
   const { events } = useStore();
   const d = useMemo(() => computeDashboard(events), [events]);
+  const nowMs = useMinuteTick();
   const [metric, setMetric] = useState('feeds');
   const m = METRICS.find((x) => x.key === metric);
 
@@ -67,16 +81,14 @@ export default function KpiDashboard() {
     );
   }
 
-  const heatTotal = d.hourly.reduce((a, b) => a + b, 0);
-
   return (
     <>
       {/* 1. En-tête : derniers événements (pas une fenêtre agrégée) */}
       <section className="stats-card">
         <h2 className="stats-h2">Derniers événements</h2>
-        <HeadRow icon="🍼" label="Dernier boire" ts={d.last.lastFeedTs} />
-        <HeadRow icon="💧" label="Dernier pipi" ts={d.last.lastPeeTs} />
-        <HeadRow icon="💩" label="Dernière selle" ts={d.last.lastPoopTs} />
+        <HeadRow icon="🍼" label="Dernier boire" ts={d.last.lastFeedTs} nowMs={nowMs} />
+        <HeadRow icon="💧" label="Dernier pipi" ts={d.last.lastPeeTs} nowMs={nowMs} />
+        <HeadRow icon="💩" label="Dernière selle" ts={d.last.lastPoopTs} nowMs={nowMs} />
       </section>
 
       {/* 2. Cartes KPI (24 h) */}
@@ -127,6 +139,8 @@ export default function KpiDashboard() {
             <IntervalBars points={d.intervals} formatGap={(ms) => fmtInterval(ms)} />
             <p className="chart-cap">
               {d.intervals.length} derniers intervalles · moyenne 24 h {fmtInterval(d.kpi.avgIntervalMs)}
+              <br />
+              Mesurés du début d'un boire au début du suivant.
             </p>
           </>
         ) : (
@@ -177,6 +191,12 @@ export default function KpiDashboard() {
               <li><span className="dot seg-left" /> Gauche · {fmtDur(d.side.leftSec)} · {fmtPct(d.side.leftPct)}</li>
               <li><span className="dot seg-right" /> Droite · {fmtDur(d.side.rightSec)} · {fmtPct(d.side.rightPct)}</li>
             </ul>
+            {d.side.estimated && (
+              <p className="chart-cap">
+                Répartition partiellement estimée : les boires enregistrés sans
+                minuterie par côté sont répartis d'après le type de boire.
+              </p>
+            )}
           </>
         ) : (
           <p className="help-text">Pas de boire au sein chronométré sur la période.</p>
@@ -186,7 +206,7 @@ export default function KpiDashboard() {
       {/* 7. Activité par heure (7 j) */}
       <section className="stats-card">
         <h2 className="stats-h2">Activité par heure (7 j)</h2>
-        {heatTotal > 0 ? (
+        {d.hourlyTotal > 0 ? (
           <Heatmap hours={d.hourly} />
         ) : (
           <p className="help-text">Aucun boire sur la période.</p>

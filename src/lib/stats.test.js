@@ -10,6 +10,8 @@ import {
   hourlyActivity,
   computeInsights,
   computeDashboard,
+  isKpiEvent,
+  MIN_DIAPERS_FOR_COMPARISON,
 } from './stats.js';
 
 // Heure locale fixe pour des tests déterministes quel que soit le fuseau.
@@ -246,17 +248,23 @@ describe('Dashboard v2 — jour / nuit', () => {
 });
 
 describe('Dashboard v2 — gauche / droite', () => {
-  it('répartit la durée, les deux = 50/50, ignore durées manquantes', () => {
+  // NOTE : l'ancienne version de ce test utilisait `lastSide: 'both'`, une
+  // valeur que la production ne peut PAS produire (isValidSession contraint
+  // currentSide à 'left' | 'right' | null). Elle est remplacée par les cas
+  // réellement observables.
+  it('repli : unilatéral au bon côté, « both » 50/50, durées manquantes ignorées', () => {
     const evs = [
       feed(-1 * H, { feedType: 'left', lastSide: 'left', durationSec: 600 }),
       feed(-2 * H, { feedType: 'right', lastSide: 'right', durationSec: 300 }),
-      feed(-3 * H, { feedType: 'both', lastSide: 'both', durationSec: 200 }),
+      feed(-3 * H, { feedType: 'both', lastSide: 'right', durationSec: 200 }),
       feed(-4 * H, { feedType: 'left', lastSide: 'left', durationSec: undefined }),
     ];
     const ss = sideSplit(evs, NOW - 7 * D, NOW);
-    expect(ss.leftSec).toBe(700);
-    expect(ss.rightSec).toBe(400);
+    expect(ss.leftSec).toBe(700); // 600 + 100 (moitié des 200)
+    expect(ss.rightSec).toBe(400); // 300 + 100
     expect(ss.leftPct).toBeCloseTo(700 / 1100);
+    expect(ss.estimated).toBe(true); // aucune durée exacte : tout est déduit
+    expect(ss.exactTotal).toBe(0);
   });
 });
 
@@ -311,5 +319,273 @@ describe('Dashboard v2 — bornes jour/nuit exactes', () => {
     const dn = dayNightSplit([at6, at18], NOW - 7 * D, NOW);
     expect(dn.day).toBe(1); // 06:00 inclus -> jour
     expect(dn.night).toBe(1); // 18:00 exclu -> nuit
+  });
+});
+
+// ── Sprint 1 : fiabilité ────────────────────────────────────────────────────
+
+describe('Sprint 1 — boires en cours exclus des KPI', () => {
+  it('isKpiEvent rejette un boire en cours, garde les anciens événements', () => {
+    expect(isKpiEvent(feed(-1 * H, { inProgress: true }))).toBe(false);
+    expect(isKpiEvent(feed(-1 * H, { inProgress: false }))).toBe(true);
+    // Ancien événement sans le champ : conservé (test strict === true).
+    expect(isKpiEvent(feed(-1 * H))).toBe(true);
+  });
+
+  it('exclu du compte, des durées et des quantités', () => {
+    const evs = [
+      feed(-1 * H, { durationSec: 600 }),
+      feed(-2 * H, { inProgress: true, durationSec: 900, amountMl: 100 }),
+    ];
+    const s = windowStats(evs, NOW - D, NOW, 1);
+    expect(s.feedCount).toBe(1);
+    expect(s.breastSec).toBe(600);
+    expect(s.totalMl).toBe(0);
+  });
+
+  it('exclu des intervalles, de la tendance, du jour/nuit, de la heatmap', () => {
+    const evs = [
+      feed(-1 * H),
+      feed(-3 * H, { inProgress: true }),
+      feed(-5 * H),
+    ];
+    // Sans le boire en cours : un seul écart de 4 h.
+    const s = windowStats(evs, NOW - D, NOW, 1);
+    expect(s.avgIntervalMs).toBe(4 * H);
+    expect(feedIntervalSeries(evs).map((p) => p.gapMs)).toEqual([4 * H]);
+    expect(weeklyTrend(evs, NOW)[6].feeds).toBe(2);
+    expect(dayNightSplit(evs, NOW - 7 * D, NOW).total).toBe(2);
+    expect(hourlyActivity(evs, NOW - 7 * D, NOW).reduce((a, b) => a + b, 0)).toBe(2);
+  });
+
+  it('exclu de « dernier boire » et de la répartition gauche/droite', () => {
+    const evs = [
+      feed(-1 * H, { inProgress: true, durationSec: 600, feedType: 'left' }),
+      feed(-4 * H, { durationSec: 300, feedType: 'left' }),
+    ];
+    expect(lastEvents(evs).lastFeedTs).toBe(NOW - 4 * H);
+    expect(sideSplit(evs, NOW - 7 * D, NOW).leftSec).toBe(300);
+  });
+
+  it('l’événement en cours n’est pas retiré du tableau source', () => {
+    const evs = [feed(-1 * H, { inProgress: true })];
+    const copy = [...evs];
+    computeDashboard(evs, NOW);
+    expect(evs).toEqual(copy); // aucune mutation
+    expect(evs).toHaveLength(1);
+  });
+});
+
+describe('Sprint 1 — biais de bord des intervalles', () => {
+  it('le dernier boire AVANT la fenêtre ancre le premier intervalle', () => {
+    // Un seul boire dans la fenêtre : sans ancre, aucun intervalle.
+    const evs = [feed(-2 * H), feed(-26 * H)];
+    const s = windowStats(evs, NOW - D, NOW, 1);
+    expect(s.longestIntervalMs).toBe(24 * H);
+    expect(s.avgIntervalMs).toBe(24 * H);
+  });
+
+  it('plus long intervalle correct au bord : le jeûne nocturne survit', () => {
+    // Boire à -25 h puis à -8 h : l'écart de 17 h franchit la borne des 24 h.
+    const evs = [feed(-8 * H), feed(-25 * H), feed(-2 * H)];
+    const s = windowStats(evs, NOW - D, NOW, 1);
+    expect(s.longestIntervalMs).toBe(17 * H); // et non 6 h
+  });
+
+  it('aucune ancre disponible : comportement inchangé', () => {
+    const evs = [feed(-1 * H), feed(-3 * H), feed(-6 * H)];
+    const s = windowStats(evs, NOW - D, NOW, 1);
+    expect(s.avgIntervalMs).toBe(2.5 * H);
+    expect(s.longestIntervalMs).toBe(3 * H);
+  });
+
+  it('un boire en cours ne peut pas servir d’ancre', () => {
+    const evs = [feed(-2 * H), feed(-26 * H, { inProgress: true })];
+    expect(windowStats(evs, NOW - D, NOW, 1).longestIntervalMs).toBeNull();
+  });
+
+  it('un tombstone ne peut pas servir d’ancre', () => {
+    const evs = [feed(-2 * H), feed(-26 * H, { deleted: true })];
+    expect(windowStats(evs, NOW - D, NOW, 1).longestIntervalMs).toBeNull();
+  });
+});
+
+describe('Sprint 1 — gauche / droite avec durées exactes', () => {
+  it('session chronométrée « both », lastSide droit : durées exactes utilisées', () => {
+    // Cas réel qui produisait le bug : 100 % du temps allait à `lastSide`.
+    const evs = [
+      feed(-1 * H, {
+        feedType: 'both',
+        lastSide: 'right',
+        durationSec: 900,
+        leftDurationSec: 600,
+        rightDurationSec: 300,
+      }),
+    ];
+    const ss = sideSplit(evs, NOW - 7 * D, NOW);
+    expect(ss.leftSec).toBe(600); // et non 0
+    expect(ss.rightSec).toBe(300); // et non 900
+    expect(ss.estimated).toBe(false);
+    expect(ss.exactTotal).toBe(900);
+  });
+
+  it('session chronométrée « both », lastSide gauche : symétrique', () => {
+    const evs = [
+      feed(-1 * H, {
+        feedType: 'both',
+        lastSide: 'left',
+        durationSec: 500,
+        leftDurationSec: 200,
+        rightDurationSec: 300,
+      }),
+    ];
+    const ss = sideSplit(evs, NOW - 7 * D, NOW);
+    expect(ss.leftSec).toBe(200);
+    expect(ss.rightSec).toBe(300);
+  });
+
+  it('ancien événement « both » sans durées exactes : repli 50/50', () => {
+    const evs = [feed(-1 * H, { feedType: 'both', lastSide: 'right', durationSec: 400 })];
+    const ss = sideSplit(evs, NOW - 7 * D, NOW);
+    expect(ss.leftSec).toBe(200);
+    expect(ss.rightSec).toBe(200);
+    expect(ss.estimated).toBe(true);
+  });
+
+  it('événement unilatéral : toute la durée au bon côté', () => {
+    const gauche = sideSplit([feed(-1 * H, { feedType: 'left', durationSec: 400 })], NOW - 7 * D, NOW);
+    expect(gauche.leftSec).toBe(400);
+    expect(gauche.rightSec).toBe(0);
+    const droite = sideSplit([feed(-1 * H, { feedType: 'right', durationSec: 400 })], NOW - 7 * D, NOW);
+    expect(droite.rightSec).toBe(400);
+    expect(droite.leftSec).toBe(0);
+  });
+
+  it('mélange exact + ancien : les deux sources cohabitent, estimated = true', () => {
+    const evs = [
+      feed(-1 * H, {
+        feedType: 'both',
+        lastSide: 'right',
+        durationSec: 900,
+        leftDurationSec: 600,
+        rightDurationSec: 300,
+      }),
+      feed(-2 * H, { feedType: 'both', durationSec: 400 }), // ancien -> 50/50
+    ];
+    const ss = sideSplit(evs, NOW - 7 * D, NOW);
+    expect(ss.leftSec).toBe(800); // 600 + 200
+    expect(ss.rightSec).toBe(500); // 300 + 200
+    expect(ss.exactLeftSec).toBe(600); // sous-ensemble mesuré seulement
+    expect(ss.estimated).toBe(true);
+  });
+
+  it('observation de côté dominant : mesurée vs estimée', () => {
+    const exact = [];
+    for (let i = 0; i < 6; i += 1) {
+      exact.push(
+        feed(-i * 6 * H - H, {
+          feedType: 'both',
+          lastSide: 'right',
+          durationSec: 1000,
+          leftDurationSec: 900,
+          rightDurationSec: 100,
+        }),
+      );
+    }
+    const insExact = computeInsights(exact, NOW);
+    expect(insExact.some((t) => /gauche nettement dominant/i.test(t))).toBe(true);
+    expect(insExact.some((t) => /estimation/i.test(t))).toBe(false);
+
+    const estime = [];
+    for (let i = 0; i < 6; i += 1) {
+      estime.push(feed(-i * 6 * H - H, { feedType: 'left', durationSec: 600 }));
+    }
+    const insEstime = computeInsights(estime, NOW);
+    expect(insEstime.some((t) => /estimation/i.test(t))).toBe(true);
+  });
+});
+
+describe('Sprint 1 — observations sur les couches', () => {
+  // Construit n couches réparties sur une période de 7 jours donnée.
+  function couches(n, offsetDays) {
+    const out = [];
+    for (let i = 0; i < n; i += 1) {
+      out.push(diaper(-(offsetDays + i * 0.5) * D, { pee: true, poop: false }));
+    }
+    return out;
+  }
+
+  it('aucune couche enregistrée : aucun message de comparaison', () => {
+    const evs = [];
+    for (let i = 0; i < 6; i += 1) evs.push(feed(-i * 6 * H - H));
+    const ins = computeInsights(evs, NOW);
+    expect(ins.some((t) => /couches/i.test(t))).toBe(false);
+    expect(ins.some((t) => /stable/i.test(t))).toBe(false);
+  });
+
+  it('une seule période suffisamment renseignée : message neutre, pas de « comparable »', () => {
+    // 6 couches cette semaine, aucune la semaine précédente.
+    const evs = couches(6, 0.5);
+    const ins = computeInsights(evs, NOW);
+    expect(ins).toContain('Données insuffisantes pour comparer les couches.');
+    expect(ins.some((t) => /comparable/i.test(t))).toBe(false);
+  });
+
+  it('données suffisantes des deux côtés et proches : observation neutre correcte', () => {
+    const evs = [...couches(6, 0.5), ...couches(6, 7.5)];
+    const ins = computeInsights(evs, NOW);
+    expect(ins).toContain('Nombre de couches comparable à la semaine précédente.');
+  });
+
+  it('sous le seuil des deux côtés : jamais de « comparable »', () => {
+    const evs = [...couches(2, 0.5), ...couches(2, 7.5)];
+    const ins = computeInsights(evs, NOW);
+    expect(ins.some((t) => /comparable/i.test(t))).toBe(false);
+    expect(ins).toContain('Données insuffisantes pour comparer les couches.');
+  });
+
+  it('MIN_DIAPERS_FOR_COMPARISON est documenté et strictement positif', () => {
+    expect(MIN_DIAPERS_FOR_COMPARISON).toBeGreaterThan(0);
+  });
+});
+
+describe('Sprint 1 — compatibilité des nouveaux champs', () => {
+  it('un ancien événement sans les nouveaux champs reste exploitable', () => {
+    const legacy = {
+      id: 'old1',
+      type: 'feed',
+      start: new Date(NOW - 2 * H).toISOString(),
+      feedType: 'both',
+      durationSec: 600,
+      // ni leftDurationSec, ni rightDurationSec, ni inProgress, ni deleted
+    };
+    expect(() => computeDashboard([legacy], NOW)).not.toThrow();
+    const ss = sideSplit([legacy], NOW - 7 * D, NOW);
+    expect(ss.leftSec).toBe(300);
+    expect(ss.rightSec).toBe(300);
+    expect(ss.estimated).toBe(true);
+  });
+
+  it('durées par côté nulles ou incohérentes : repli, jamais de NaN', () => {
+    const evs = [
+      feed(-1 * H, { feedType: 'both', durationSec: 400, leftDurationSec: 0, rightDurationSec: 0 }),
+      feed(-2 * H, {
+        feedType: 'both',
+        durationSec: 400,
+        leftDurationSec: 'x',
+        rightDurationSec: null,
+      }),
+    ];
+    const ss = sideSplit(evs, NOW - 7 * D, NOW);
+    expect(Number.isFinite(ss.leftSec)).toBe(true);
+    expect(Number.isFinite(ss.rightSec)).toBe(true);
+    expect(ss.leftSec).toBe(400); // les deux retombent sur le 50/50
+    expect(ss.rightSec).toBe(400);
+  });
+
+  it('computeDashboard expose hourlyTotal cohérent avec hourly', () => {
+    const d = computeDashboard([feed(-1 * H), feed(-4 * H)], NOW);
+    expect(d.hourlyTotal).toBe(d.hourly.reduce((a, b) => a + b, 0));
+    expect(d.hourlyTotal).toBe(2);
   });
 });

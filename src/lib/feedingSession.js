@@ -122,7 +122,9 @@ export function isLong(session, nowMs = Date.now()) {
 // Renvoie UN seul objet ; ne crée pas l'événement (le store s'en charge).
 export function finalizeToEvent(session, nowMs = Date.now(), extra = {}) {
   if (!session) return null;
-  const durationSec = Math.round(totalMs(session, nowMs) / 1000);
+  const leftMs = elapsedLeftMs(session, nowMs);
+  const rightMs = elapsedRightMs(session, nowMs);
+  const durationSec = Math.round((leftMs + rightMs) / 1000);
   const note = extra.note != null ? extra.note : session.note || '';
   return {
     type: 'feed',
@@ -132,6 +134,17 @@ export function finalizeToEvent(session, nowMs = Date.now(), extra = {}) {
     amountMl: null,
     inProgress: false,
     lastSide: session.currentSide || null,
+    // Durées exactes par côté — ajout ADDITIF et OPTIONNEL. Les statistiques
+    // s'en servent pour ne plus estimer la répartition gauche/droite ; les
+    // anciens événements qui en sont dépourvus continuent d'être traités par
+    // repli (cf. sideSplit). `durationSec`, `feedType` et `lastSide` restent
+    // inchangés pour la compatibilité descendante.
+    //
+    // NB : les trois arrondis sont indépendants, donc
+    // leftDurationSec + rightDurationSec peut différer de durationSec d'une
+    // seconde. Les statistiques n'additionnent jamais les deux sources.
+    leftDurationSec: Math.round(leftMs / 1000),
+    rightDurationSec: Math.round(rightMs / 1000),
     note: String(note).trim(),
   };
 }

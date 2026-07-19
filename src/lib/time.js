@@ -50,9 +50,11 @@ export function formatStopwatch(totalSec) {
 }
 
 // Temps écoulé depuis une date -> "il y a 2 h 15" ; renvoie "—" si absent.
-export function elapsedSince(iso) {
+// `nowMs` est injectable : l'appelant peut forcer un recalcul d'affichage sans
+// nouvel événement, et les tests peuvent simuler l'horloge sans attendre.
+export function elapsedSince(iso, nowMs = Date.now()) {
   if (!iso) return '—';
-  const diffSec = (Date.now() - new Date(iso).getTime()) / 1000;
+  const diffSec = (nowMs - new Date(iso).getTime()) / 1000;
   if (diffSec < 60) return "à l'instant";
   return `il y a ${formatDuration(diffSec)}`;
 }
