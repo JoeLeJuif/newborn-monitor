@@ -20,6 +20,8 @@ import {
   formatStopwatch,
 } from '../lib/time.js';
 import { totalMs, isRunning } from '../lib/feedingSession.js';
+import { isSessionMode, sessionStatusLine } from '../lib/activeFeedingView.js';
+import ConfirmDialog from './ConfirmDialog.jsx';
 
 const ML_QUICK = [15, 30, 60, 90, 120];
 
@@ -51,10 +53,13 @@ export default function FeedForm({ goBack, editId, onSaved }) {
   const [now, setNow] = useState(() => readNow());
   // Verrou visuel pendant la finalisation (en plus de la garde du contexte).
   const [finishing, setFinishing] = useState(false);
+  // Confirmation avant d'annuler (supprimer) un boire déjà chronométré.
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   // Un boire chronométré est déjà en cours et on ouvre un NOUVEAU boire :
   // on ne crée jamais un second boire en silence (manuel, biberon ou chrono).
-  const sessionActiveHere = !!session && !editId;
+  // Dans ce cas l'écran bascule entièrement en MODE session (pas de formulaire).
+  const sessionActiveHere = isSessionMode(session, editId);
 
   const isBreast = feedTypeMeta(feedType).breast;
   const isBottle = feedTypeMeta(feedType).bottle;
@@ -67,12 +72,19 @@ export default function FeedForm({ goBack, editId, onSaved }) {
   // Heure de début affichée : celle de la session active si présente.
   const displayStart = timerActive && session ? session.startedAt : start;
 
-  // Rafraîchit l'affichage de la minuterie chaque seconde quand elle tourne.
+  // Valeurs du MODE session (indépendantes du mode de saisie / du type choisi) :
+  // le chronomètre et le sein viennent directement de la session globale.
+  const sessionRunning = sessionActiveHere && isRunning(session);
+  const sessionActiveSide = sessionActiveHere ? session?.currentSide ?? null : null;
+  const sessionSeconds = sessionActiveHere && session ? totalMs(session, now) / 1000 : 0;
+
+  // Rafraîchit l'affichage du chronomètre chaque seconde quand il tourne, que
+  // l'on soit dans le formulaire (minuterie) ou en mode session.
   useEffect(() => {
-    if (!running) return undefined;
+    if (!running && !sessionRunning) return undefined;
     const id = setInterval(() => setNow(readNow()), 500);
     return () => clearInterval(id);
-  }, [running]);
+  }, [running, sessionRunning]);
 
   function selectSide(side) {
     feeding.startOrSwitch(side);
@@ -145,6 +157,80 @@ export default function FeedForm({ goBack, editId, onSaved }) {
     goBack();
   }
 
+  // ── MODE SESSION ──────────────────────────────────────────────────────────
+  // Un boire est déjà chronométré : on n'affiche PAS le formulaire de création
+  // (ni le choix minuterie/manuel, ni le type d'alimentation). On présente une
+  // vraie session : statut, gros chrono, contrôles, et une annulation discrète
+  // et confirmée. On ne crée jamais un second boire en parallèle.
+  if (sessionActiveHere) {
+    return (
+      <div className="screen form-screen">
+        <header className="form-header">
+          <button className="back-btn" onClick={goBack} aria-label="Retour">
+            ‹
+          </button>
+          <h1>Boire en cours</h1>
+        </header>
+
+        <div className="timer-card" role="group" aria-label="Boire en cours">
+          <p className="session-status">{sessionStatusLine(session)}</p>
+          <div className="timer-display">{formatStopwatch(sessionSeconds)}</div>
+          <div className="timer-sides">
+            <button
+              className={`side-btn ${sessionActiveSide === 'left' ? 'side-active' : ''}`}
+              onClick={() => selectSide('left')}
+              aria-pressed={sessionActiveSide === 'left'}
+            >
+              Sein gauche
+            </button>
+            <button
+              className={`side-btn ${sessionActiveSide === 'right' ? 'side-active' : ''}`}
+              onClick={() => selectSide('right')}
+              aria-pressed={sessionActiveSide === 'right'}
+            >
+              Sein droit
+            </button>
+          </div>
+          <div className="timer-controls">
+            <button className="btn btn-ghost" onClick={pauseOrResume}>
+              {sessionRunning ? '⏸ Pause' : '▶ Reprendre'}
+            </button>
+          </div>
+        </div>
+
+        <button
+          className="btn btn-primary btn-save"
+          onClick={save}
+          disabled={finishing}
+          aria-busy={finishing}
+        >
+          Terminer le boire
+        </button>
+
+        <button
+          type="button"
+          className="link-btn link-danger session-cancel"
+          onClick={() => setConfirmCancel(true)}
+        >
+          Annuler et supprimer ce boire
+        </button>
+
+        <ConfirmDialog
+          open={confirmCancel}
+          title="Annuler ce boire ?"
+          message="Le temps chronométré sera supprimé. Cette action est irréversible."
+          confirmLabel="Annuler le boire"
+          onConfirm={() => {
+            setConfirmCancel(false);
+            feeding.cancel();
+            goBack();
+          }}
+          onCancel={() => setConfirmCancel(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="screen form-screen">
       <header className="form-header">
@@ -153,31 +239,6 @@ export default function FeedForm({ goBack, editId, onSaved }) {
         </button>
         <h1>{editId ? 'Modifier le boire' : 'Nouveau boire'}</h1>
       </header>
-
-      {sessionActiveHere && (
-        <div className="inline-notice" role="status">
-          <span>Un boire chronométré est déjà en cours.</span>
-          <div className="inline-notice-actions">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => {
-                setEntryMode('timer');
-                setFeedType(session.feedingType || 'left');
-              }}
-            >
-              Revenir au boire en cours
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => feeding.cancel()}
-            >
-              Annuler le boire en cours
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="mode-switch" role="tablist" aria-label="Mode de saisie">
         <button
@@ -365,17 +426,8 @@ export default function FeedForm({ goBack, editId, onSaved }) {
         />
       </div>
 
-      <button
-        className="btn btn-primary btn-save"
-        onClick={save}
-        disabled={sessionActiveHere && finishing}
-        aria-busy={sessionActiveHere && finishing}
-      >
-        {editId
-          ? 'Enregistrer les modifications'
-          : sessionActiveHere
-            ? 'Terminer le boire'
-            : 'Enregistrer le boire'}
+      <button className="btn btn-primary btn-save" onClick={save}>
+        {editId ? 'Enregistrer les modifications' : 'Enregistrer le boire'}
       </button>
     </div>
   );
