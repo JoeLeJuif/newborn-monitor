@@ -3,7 +3,7 @@
 // StatCharts.jsx. Ne modifie aucune donnée ; ignore les tombstones (via stats).
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/useStore.jsx';
-import { computeDashboard } from '../lib/stats.js';
+import { computeDashboard, kpiEvents } from '../lib/stats.js';
 import { formatDuration, formatTime, elapsedSince } from '../lib/time.js';
 import { Donut, SplitBar, MetricBars, IntervalBars, Heatmap } from './StatCharts.jsx';
 
@@ -68,7 +68,10 @@ export default function KpiDashboard() {
   const [metric, setMetric] = useState('feeds');
   const m = METRICS.find((x) => x.key === metric);
 
-  const hasData = events.length > 0;
+  // L'état vide doit refléter ce que les KPI agrègent RÉELLEMENT : un boire
+  // encore en cours est exclu des calculs, il ne doit donc pas déclencher un
+  // tableau de bord entièrement à zéro (cas de la toute première tétée).
+  const hasData = useMemo(() => kpiEvents(events).length > 0, [events]);
 
   if (!hasData) {
     return (
@@ -138,9 +141,9 @@ export default function KpiDashboard() {
           <>
             <IntervalBars points={d.intervals} formatGap={(ms) => fmtInterval(ms)} />
             <p className="chart-cap">
-              {d.intervals.length} derniers intervalles · moyenne 24 h {fmtInterval(d.kpi.avgIntervalMs)}
-              <br />
-              Mesurés du début d'un boire au début du suivant.
+              {d.intervals.length} derniers intervalles · moyenne 24 h{' '}
+              {fmtInterval(d.kpi.avgIntervalMs)} · Du début d'un boire au début
+              du suivant.
             </p>
           </>
         ) : (
@@ -182,6 +185,7 @@ export default function KpiDashboard() {
         {d.side.total > 0 ? (
           <>
             <SplitBar
+              ariaSuffix={d.side.estimated ? 'répartition estimée' : undefined}
               segments={[
                 { value: d.side.leftSec, className: 'seg-left', label: 'Gauche' },
                 { value: d.side.rightSec, className: 'seg-right', label: 'Droite' },
@@ -192,10 +196,7 @@ export default function KpiDashboard() {
               <li><span className="dot seg-right" /> Droite · {fmtDur(d.side.rightSec)} · {fmtPct(d.side.rightPct)}</li>
             </ul>
             {d.side.estimated && (
-              <p className="chart-cap">
-                Répartition partiellement estimée : les boires enregistrés sans
-                minuterie par côté sont répartis d'après le type de boire.
-              </p>
+              <p className="chart-cap">Répartition estimée pour une partie des boires.</p>
             )}
           </>
         ) : (

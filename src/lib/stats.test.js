@@ -11,6 +11,7 @@ import {
   computeInsights,
   computeDashboard,
   isKpiEvent,
+  kpiEvents,
   MIN_DIAPERS_FOR_COMPARISON,
 } from './stats.js';
 
@@ -367,6 +368,16 @@ describe('Sprint 1 — boires en cours exclus des KPI', () => {
     expect(sideSplit(evs, NOW - 7 * D, NOW).leftSec).toBe(300);
   });
 
+  it('kpiEvents est vide si le seul événement est un boire en cours', () => {
+    // Logique derrière l'état vide du tableau de bord : un boire encore en
+    // cours ne doit pas faire croire qu'il y a des données à afficher.
+    expect(kpiEvents([feed(-1 * H, { inProgress: true })])).toHaveLength(0);
+    // Dès qu'un boire terminé existe, le tableau de bord a de quoi s'afficher.
+    expect(kpiEvents([feed(-1 * H, { inProgress: true }), feed(-2 * H)])).toHaveLength(1);
+    // Entrée non tableau : jamais d'exception.
+    expect(kpiEvents(null)).toEqual([]);
+  });
+
   it('l’événement en cours n’est pas retiré du tableau source', () => {
     const evs = [feed(-1 * H, { inProgress: true })];
     const copy = [...evs];
@@ -492,16 +503,21 @@ describe('Sprint 1 — gauche / droite avec durées exactes', () => {
         }),
       );
     }
+    // Mesuré : formulation affirmative, sans réserve.
     const insExact = computeInsights(exact, NOW);
     expect(insExact.some((t) => /gauche nettement dominant/i.test(t))).toBe(true);
-    expect(insExact.some((t) => /estimation/i.test(t))).toBe(false);
+    expect(insExact.some((t) => /estimé/i.test(t))).toBe(false);
+    expect(insExact.some((t) => /semble/i.test(t))).toBe(false);
 
     const estime = [];
     for (let i = 0; i < 6; i += 1) {
       estime.push(feed(-i * 6 * H - H, { feedType: 'left', durationSec: 600 }));
     }
+    // Estimé : formulation prudente et réserve explicite.
     const insEstime = computeInsights(estime, NOW);
-    expect(insEstime.some((t) => /estimation/i.test(t))).toBe(true);
+    expect(insEstime.some((t) => /côté gauche semble dominant/i.test(t))).toBe(true);
+    expect(insEstime.some((t) => /estimé/i.test(t))).toBe(true);
+    expect(insEstime.some((t) => /nettement dominant/i.test(t))).toBe(false);
   });
 });
 

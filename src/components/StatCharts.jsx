@@ -35,12 +35,15 @@ export function Donut({ segments, ariaLabel }) {
 }
 
 // Barre de répartition horizontale empilée. segments: [{ value, className, label }].
-export function SplitBar({ segments }) {
+// `ariaSuffix` (optionnel) complète l'étiquette vocale sans rien changer au
+// rendu : sert à annoncer une réserve, p. ex. « répartition estimée ».
+export function SplitBar({ segments, ariaSuffix }) {
   const total = segments.reduce((a, s) => a + s.value, 0);
   if (total <= 0) return null;
-  const label = segments
+  const parts = segments
     .map((s) => `${s.label} ${Math.round((s.value / total) * 100)} %`)
     .join(', ');
+  const label = ariaSuffix ? `${parts} — ${ariaSuffix}` : parts;
   return (
     <div className="splitbar" role="img" aria-label={label}>
       {segments.map(

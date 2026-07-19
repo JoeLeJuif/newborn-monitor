@@ -358,10 +358,12 @@ export function computeInsights(events, now = Date.now()) {
       if (domPct >= 0.65) {
         const cote = l >= r ? 'gauche' : 'droit';
         const pct = Math.round(domPct * 100);
+        // Affirmatif quand la durée est mesurée ; prudent quand elle est déduite
+        // du type de boire. Les seuils sont identiques dans les deux cas.
         out.push(
           useExact
             ? `Côté ${cote} nettement dominant (${pct} %).`
-            : `Côté ${cote} nettement dominant (${pct} %, estimation).`,
+            : `Côté ${cote} semble dominant (${pct} % estimé).`,
         );
       }
     }
