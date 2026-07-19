@@ -715,6 +715,18 @@ textarea.text-input { resize: vertical; }
 .insights { margin: 0; padding-left: 18px; font-size: 14px; }
 .insights li { padding: 3px 0; }
 
+/* Sélecteur de période : 5 puces compactes qui doivent tenir sur une ligne
+   dès 320 px, sans réduire la cible tactile sous 44 px de hauteur. */
+.period-grid { flex-wrap: nowrap; gap: 6px; margin-bottom: 12px; }
+.period-grid .chip-sm {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 4px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 /* Répartition des types de boires : liste compacte, volontairement pas un
    graphique (l'information est un simple comptage). */
 .breakdown { list-style: none; margin: 0; padding: 0; font-size: 14px; }

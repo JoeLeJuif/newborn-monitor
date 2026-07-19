@@ -476,26 +476,56 @@ export function dataCompleteness(events, fromMs, toMs) {
   return { level, score, signals };
 }
 
+// Résout la fenêtre d'analyse à partir d'un nombre de jours.
+//   periodDays = nombre de jours (fenêtre glissante) ;
+//   periodDays = null → « Tout », borné au premier événement exploitable
+//                (jamais à l'époque Unix, sinon les moyennes par jour seraient
+//                divisées par des milliers de journées vides).
+export function resolveWindow(events, now, periodDays) {
+  if (periodDays != null) {
+    return { fromMs: now - periodDays * DAY_MS, toMs: now, days: periodDays };
+  }
+  let earliest = null;
+  for (const e of kpiEvents(events)) {
+    const t = ts(e);
+    if (earliest == null || t < earliest) earliest = t;
+  }
+  const fromMs = earliest == null ? now : earliest;
+  return { fromMs, toMs: now, days: Math.max(1, Math.ceil((now - fromMs) / DAY_MS)) };
+}
+
 // Agrégateur unique pour le dashboard (garde KpiDashboard.jsx léger).
-export function computeDashboard(events, now = Date.now()) {
+//
+// `options.periodDays` est la SOURCE UNIQUE de la fenêtre d'analyse : toutes
+// les statistiques bornées dans le temps en découlent. Par défaut 1 jour, ce
+// qui reproduit exactement le comportement historique des cartes.
+//
+// Deux blocs échappent volontairement à ce paramètre, parce qu'ils ne sont pas
+// des agrégats de fenêtre et que les faire suivre changerait leur calcul :
+//   * `trend`    — série de 7 seaux JOURNALIERS ; c'est une courbe, pas un
+//                  total, et « la tendance sur 24 h » n'aurait pas de sens ;
+//   * `insights` — comparaison 7 jours vs 7 jours précédents, dont les libellés
+//                  disent explicitement « cette semaine ».
+// `intervals` reste également sur les 12 derniers écarts (série, pas fenêtre).
+export function computeDashboard(events, now = Date.now(), options = {}) {
   const list = Array.isArray(events) ? events : [];
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  const from7 = start.getTime() - 6 * DAY_MS;
-  const hourly = hourlyActivity(list, from7, now);
+  const periodDays = options.periodDays === undefined ? 1 : options.periodDays;
+  const w = resolveWindow(list, now, periodDays);
+  const hourly = hourlyActivity(list, w.fromMs, w.toMs);
   return {
+    // Fenêtre effectivement appliquée : l'affichage s'en sert pour libeller les
+    // titres, afin qu'aucune section ne mente sur la période qu'elle couvre.
+    period: { days: periodDays, effectiveDays: w.days, fromMs: w.fromMs, toMs: w.toMs },
     last: lastEvents(list),
-    kpi: windowStats(list, now - DAY_MS, now, 1),
+    kpi: windowStats(list, w.fromMs, w.toMs, w.days),
     trend: weeklyTrend(list, now),
     intervals: feedIntervalSeries(list, 12),
-    dayNight: dayNightSplit(list, from7, now),
-    side: sideSplit(list, from7, now),
+    dayNight: dayNightSplit(list, w.fromMs, w.toMs),
+    side: sideSplit(list, w.fromMs, w.toMs),
     hourly,
     // Total pré-calculé : évite une réduction dans le composant.
     hourlyTotal: hourly.reduce((a, b) => a + b, 0),
-    // Complétude évaluée sur 7 jours : sur 24 h, le score oscillerait au gré
-    // d'une seule saisie oubliée.
-    completeness: dataCompleteness(list, from7, now),
+    completeness: dataCompleteness(list, w.fromMs, w.toMs),
     insights: computeInsights(list, now),
   };
 }
