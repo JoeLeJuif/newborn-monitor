@@ -46,18 +46,39 @@ function Kpi({ label, value, unit }) {
   );
 }
 
+// Le temps écoulé est l'information recherchée en priorité (« ça fait combien
+// de temps ? ») : il passe en valeur principale, l'heure exacte devient le
+// détail secondaire.
 function HeadRow({ icon, label, ts, nowMs }) {
   return (
     <div className="head-row">
       <span className="head-ico" aria-hidden="true">{icon}</span>
       <span className="head-label">{label}</span>
       <span className="head-val">
-        <strong>{fmtClock(ts)}</strong>
-        <em>{fmtElapsed(ts, nowMs)}</em>
+        <strong>{fmtElapsed(ts, nowMs)}</strong>
+        <em>{ts == null ? '' : `à ${fmtClock(ts)}`}</em>
       </span>
     </div>
   );
 }
+
+// Libellés des paliers de complétude. Volontairement factuels : ils décrivent
+// la SAISIE, jamais l'enfant ni la santé.
+const COMPLETENESS_LABEL = {
+  complete: 'Très complet',
+  good: 'Bon',
+  partial: 'Partiel',
+  insufficient: 'Données insuffisantes',
+};
+
+// Répartition des types de boires : libellés alignés sur constants.js.
+const BREAKDOWN_ROWS = [
+  { key: 'left', label: 'Sein gauche' },
+  { key: 'right', label: 'Sein droit' },
+  { key: 'both', label: 'Les deux seins' },
+  { key: 'bottle', label: 'Biberon' },
+  { key: 'other', label: 'Autres' },
+];
 
 const dayNarrow = (d) => d.date.toLocaleDateString('fr-CA', { weekday: 'narrow' });
 
@@ -99,11 +120,39 @@ export default function KpiDashboard() {
       <div className="kpi-grid">
         <Kpi label="Boires" value={d.kpi.feedCount} />
         <Kpi label="Temps au sein" value={fmtDur(d.kpi.breastSec || null)} />
+        {/* Durée moyenne : affichée seulement si au moins une durée valide
+            existe. `avgDurationSec` est null sinon — jamais 0, jamais NaN. */}
+        {d.kpi.avgDurationSec != null && (
+          <Kpi label="Durée moyenne" value={fmtDur(d.kpi.avgDurationSec)} />
+        )}
         <Kpi label="Pipis" value={d.kpi.pees} />
         <Kpi label="Selles" value={d.kpi.poops} />
         <Kpi label="Intervalle moyen" value={fmtInterval(d.kpi.avgIntervalMs)} />
         <Kpi label="Plus long intervalle" value={fmtInterval(d.kpi.longestIntervalMs)} />
+        {/* Quantités : rien du tout si aucune n'a été saisie (allaitement
+            exclusif), plutôt qu'une carte à zéro. */}
+        {d.kpi.mlCount > 0 && (
+          <>
+            <Kpi label="Quantité totale" value={Math.round(d.kpi.totalMl)} unit="ml" />
+            <Kpi label="Quantité moyenne" value={Math.round(d.kpi.avgMl)} unit="ml" />
+          </>
+        )}
       </div>
+
+      {/* 2b. Répartition des types de boires (24 h) — lignes vides masquées */}
+      {d.kpi.feedCount > 0 && (
+        <section className="stats-card">
+          <h2 className="stats-h2">Types de boires (24 h)</h2>
+          <ul className="breakdown">
+            {BREAKDOWN_ROWS.filter((r) => d.kpi.breakdown[r.key] > 0).map((r) => (
+              <li key={r.key}>
+                <span className="breakdown-label">{r.label}</span>
+                <span className="breakdown-val">{d.kpi.breakdown[r.key]}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* 3. Tendance 7 jours (une métrique à la fois) */}
       <section className="stats-card">
@@ -225,6 +274,14 @@ export default function KpiDashboard() {
           </ul>
         </section>
       )}
+
+      {/* 9. Complétude des saisies — porte sur les DONNÉES, pas sur l'enfant */}
+      <section className="stats-card completeness">
+        <span className="completeness-label">Complétude des saisies (7 j)</span>
+        <span className={`completeness-level lvl-${d.completeness.level}`}>
+          {COMPLETENESS_LABEL[d.completeness.level]}
+        </span>
+      </section>
     </>
   );
 }

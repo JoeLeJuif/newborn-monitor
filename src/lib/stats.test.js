@@ -13,6 +13,9 @@ import {
   isKpiEvent,
   kpiEvents,
   MIN_DIAPERS_FOR_COMPARISON,
+  dataCompleteness,
+  COMPLETENESS_LEVELS,
+  MIN_EVENTS_FOR_COMPLETENESS,
 } from './stats.js';
 
 // Heure locale fixe pour des tests déterministes quel que soit le fuseau.
@@ -603,5 +606,118 @@ describe('Sprint 1 — compatibilité des nouveaux champs', () => {
     const d = computeDashboard([feed(-1 * H), feed(-4 * H)], NOW);
     expect(d.hourlyTotal).toBe(d.hourly.reduce((a, b) => a + b, 0));
     expect(d.hourlyTotal).toBe(2);
+  });
+});
+
+// ── Sprint 2 : enrichissement des KPI ───────────────────────────────────────
+
+describe('Sprint 2 — durée moyenne', () => {
+  it('null quand aucune durée valide : jamais 0, jamais NaN', () => {
+    const s = windowStats(
+      [feed(-1 * H, { durationSec: 0 }), feed(-2 * H, { durationSec: undefined })],
+      NOW - D,
+      NOW,
+      1,
+    );
+    expect(s.avgDurationSec).toBeNull();
+    expect(Number.isNaN(s.avgDurationSec)).toBe(false);
+  });
+
+  it('moyenne sur les seules durées renseignées', () => {
+    const s = windowStats(
+      [feed(-1 * H, { durationSec: 600 }), feed(-2 * H, { durationSec: 900 }), feed(-3 * H, { durationSec: 0 })],
+      NOW - D,
+      NOW,
+      1,
+    );
+    expect(s.avgDurationSec).toBe(750); // (600 + 900) / 2, la durée nulle exclue
+  });
+});
+
+describe('Sprint 2 — quantités', () => {
+  it('aucune quantité : mlCount à 0 et moyenne nulle (rien à afficher)', () => {
+    const s = windowStats([feed(-1 * H), feed(-2 * H)], NOW - D, NOW, 1);
+    expect(s.mlCount).toBe(0);
+    expect(s.avgMl).toBeNull();
+    expect(s.totalMl).toBe(0);
+  });
+
+  it('quantités présentes : total et moyenne sur les seules saisies', () => {
+    const s = windowStats(
+      [feed(-1 * H, { amountMl: 90 }), feed(-2 * H, { amountMl: 60 }), feed(-3 * H, { amountMl: null })],
+      NOW - D,
+      NOW,
+      1,
+    );
+    expect(s.mlCount).toBe(2);
+    expect(s.totalMl).toBe(150);
+    expect(s.avgMl).toBe(75); // pas 150/3
+  });
+});
+
+describe('Sprint 2 — répartition des types de boires', () => {
+  it('compte chaque type, y compris biberon et inconnu', () => {
+    const s = windowStats(
+      [
+        feed(-1 * H, { feedType: 'left' }),
+        feed(-2 * H, { feedType: 'right' }),
+        feed(-3 * H, { feedType: 'both' }),
+        feed(-4 * H, { feedType: 'formula' }),
+        feed(-5 * H, { feedType: 'type_inconnu' }),
+      ],
+      NOW - D,
+      NOW,
+      1,
+    );
+    expect(s.breakdown).toEqual({ left: 1, right: 1, both: 1, bottle: 1, other: 1 });
+  });
+});
+
+describe('Sprint 2 — complétude des saisies', () => {
+  // 7 couches réparties sur la fenêtre de 7 jours.
+  const septCouches = () => {
+    const out = [];
+    for (let i = 0; i < 7; i += 1) out.push(diaper(-(i + 0.5) * D));
+    return out;
+  };
+
+  it('volume insuffisant : aucun score publié', () => {
+    const r = dataCompleteness([feed(-1 * H), diaper(-2 * H)], NOW - 7 * D, NOW);
+    expect(r.level).toBe('insufficient');
+    expect(r.score).toBeNull();
+    expect(MIN_EVENTS_FOR_COMPLETENESS).toBeGreaterThan(0);
+  });
+
+  it('allaitement exclusif : jamais pénalisé par l’absence de quantités', () => {
+    const evs = [];
+    for (let i = 0; i < 6; i += 1) evs.push(feed(-(i + 0.2) * D, { feedType: 'left', durationSec: 600 }));
+    const r = dataCompleteness([...evs, ...septCouches()], NOW - 7 * D, NOW);
+    // Le signal « quantité » est absent du calcul, il ne tire rien vers le bas.
+    expect(r.signals.map((s) => s.key)).not.toContain('amount');
+    expect(r.level).toBe('complete');
+  });
+
+  it('durées manquantes : score partiel', () => {
+    const evs = [];
+    for (let i = 0; i < 6; i += 1) evs.push(feed(-(i + 0.2) * D, { feedType: 'left', durationSec: 0 }));
+    const r = dataCompleteness([...evs, ...septCouches()], NOW - 7 * D, NOW);
+    expect(r.level).toBe('partial');
+    expect(r.score).toBeCloseTo(0.5); // durée 0 + couches 1, sur 2 signaux
+  });
+
+  it('biberons : le signal « quantité » apparaît', () => {
+    const evs = [];
+    for (let i = 0; i < 6; i += 1) {
+      evs.push(feed(-(i + 0.2) * D, { feedType: 'formula', durationSec: 0, amountMl: 90 }));
+    }
+    const r = dataCompleteness([...evs, ...septCouches()], NOW - 7 * D, NOW);
+    expect(r.signals.map((s) => s.key)).toContain('amount');
+    expect(r.signals.map((s) => s.key)).not.toContain('duration');
+    expect(r.level).toBe('complete');
+  });
+
+  it('le niveau fait toujours partie des paliers connus', () => {
+    const d = computeDashboard([feed(-1 * H)], NOW);
+    expect(COMPLETENESS_LEVELS).toContain(d.completeness.level);
   });
 });

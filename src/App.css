@@ -653,7 +653,8 @@ textarea.text-input { resize: vertical; }
 .head-ico { font-size: 20px; }
 .head-label { color: var(--text-muted); font-size: 14px; }
 .head-val { margin-left: auto; text-align: right; display: flex; flex-direction: column; line-height: 1.15; }
-.head-val strong { font-variant-numeric: tabular-nums; }
+/* Le temps écoulé est la valeur principale ; l'heure exacte passe en second. */
+.head-val strong { font-variant-numeric: tabular-nums; font-size: 15px; }
 .head-val em { font-style: normal; font-size: 12px; color: var(--text-muted); }
 
 .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
@@ -713,6 +714,28 @@ textarea.text-input { resize: vertical; }
 
 .insights { margin: 0; padding-left: 18px; font-size: 14px; }
 .insights li { padding: 3px 0; }
+
+/* Répartition des types de boires : liste compacte, volontairement pas un
+   graphique (l'information est un simple comptage). */
+.breakdown { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+.breakdown li {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border);
+}
+.breakdown li:last-child { border-bottom: none; }
+.breakdown-label { color: var(--text-muted); }
+.breakdown-val { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Complétude des saisies : une seule ligne, discrète. Aucun code couleur
+   (vert/rouge) — un feu de circulation donnerait une impression d'évaluation
+   médicale, alors que l'indicateur ne parle que du remplissage des champs. */
+.completeness {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 12px 16px;
+}
+.completeness-label { font-size: 13px; color: var(--text-muted); }
+.completeness-level { font-size: 14px; font-weight: 700; }
+.completeness-level.lvl-insufficient { font-weight: 600; color: var(--text-muted); }
 
 /* ── Navigation basse ── */
 .bottom-nav {

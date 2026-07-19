@@ -399,6 +399,83 @@ export function computeInsights(events, now = Date.now()) {
   return out.slice(0, 3);
 }
 
+// ── Complétude des SAISIES ──────────────────────────────────────────────────
+//
+// Mesure UNIQUEMENT à quel point les champs optionnels ont été remplis. Ce
+// n'est en aucun cas une évaluation de l'enfant, de l'allaitement ou de la
+// santé : c'est un indicateur de qualité de journalisation, rien d'autre. Les
+// libellés visibles doivent rester factuels (voir KpiDashboard.jsx).
+//
+// Trois signaux, chacun ÉCARTÉ quand il n'est pas applicable — un dénominateur
+// nul ne compte jamais comme un zéro, conformément au contrat en tête de
+// fichier :
+//   * durée    — part des boires AU SEIN dont la durée est renseignée ;
+//   * quantité — part des boires AU BIBERON dont la quantité est renseignée ;
+//   * couches  — couches enregistrées par tranche de 24 h (plafonné à 1).
+//
+// Conséquence voulue : un allaitement exclusif n'est JAMAIS pénalisé pour
+// l'absence de quantités — le signal « quantité » disparaît simplement du
+// calcul, au lieu de tirer le score vers le bas.
+
+// En dessous de ce volume, aucun score n'est publié : un « très complet »
+// obtenu sur deux événements serait flatteur et trompeur.
+export const MIN_EVENTS_FOR_COMPLETENESS = 5;
+
+// Paliers, du plus complet au moins complet. Clés stables : la traduction en
+// français vit dans la couche d'affichage.
+export const COMPLETENESS_LEVELS = ['complete', 'good', 'partial', 'insufficient'];
+
+export function dataCompleteness(events, fromMs, toMs) {
+  const win = inWindow(events, fromMs, toMs);
+  const feeds = win.filter((e) => e.type === 'feed');
+  const diapers = win.filter((e) => e.type === 'diaper');
+
+  const empty = { level: 'insufficient', score: null, signals: [] };
+  if (win.length < MIN_EVENTS_FOR_COMPLETENESS) return empty;
+
+  let breastTotal = 0;
+  let breastWithDuration = 0;
+  let bottleTotal = 0;
+  let bottleWithAmount = 0;
+
+  for (const e of feeds) {
+    const meta = feedTypeMeta(e.feedType);
+    if (meta.breast) {
+      breastTotal += 1;
+      const d = Number(e.durationSec);
+      if (Number.isFinite(d) && d > 0) breastWithDuration += 1;
+    } else if (meta.bottle) {
+      bottleTotal += 1;
+      const ml = e.amountMl == null ? null : Number(e.amountMl);
+      if (Number.isFinite(ml) && ml > 0) bottleWithAmount += 1;
+    }
+  }
+
+  // Nombre de journées couvertes par la fenêtre (au moins 1).
+  const days = Math.max(1, Math.round((toMs - fromMs) / DAY_MS));
+
+  const signals = [];
+  if (breastTotal > 0) {
+    signals.push({ key: 'duration', ratio: breastWithDuration / breastTotal });
+  }
+  if (bottleTotal > 0) {
+    signals.push({ key: 'amount', ratio: bottleWithAmount / bottleTotal });
+  }
+  // Une couche par jour suffit au plein score : le signal dit « le suivi des
+  // couches est tenu », pas « le nombre de couches est normal ».
+  signals.push({ key: 'diaper', ratio: Math.min(1, diapers.length / days) });
+
+  if (!signals.length) return empty;
+
+  const score = signals.reduce((a, s) => a + s.ratio, 0) / signals.length;
+  let level;
+  if (score >= 0.85) level = 'complete';
+  else if (score >= 0.6) level = 'good';
+  else level = 'partial';
+
+  return { level, score, signals };
+}
+
 // Agrégateur unique pour le dashboard (garde KpiDashboard.jsx léger).
 export function computeDashboard(events, now = Date.now()) {
   const list = Array.isArray(events) ? events : [];
@@ -416,6 +493,9 @@ export function computeDashboard(events, now = Date.now()) {
     hourly,
     // Total pré-calculé : évite une réduction dans le composant.
     hourlyTotal: hourly.reduce((a, b) => a + b, 0),
+    // Complétude évaluée sur 7 jours : sur 24 h, le score oscillerait au gré
+    // d'une seule saisie oubliée.
+    completeness: dataCompleteness(list, from7, now),
     insights: computeInsights(list, now),
   };
 }
