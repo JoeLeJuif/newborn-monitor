@@ -118,17 +118,25 @@ export default function KpiDashboard() {
       {/* 2. Cartes KPI (24 h) */}
       <h2 className="stats-h2 stats-sub">Dernières 24 h</h2>
       <div className="kpi-grid">
+        {/* Règle de visibilité commune à toutes les cartes informatives : une
+            carte sans valeur à montrer disparaît, plutôt que d'afficher « — ».
+            Les comptages (Boires, Pipis, Selles) restent toujours visibles :
+            « 0 » y est une information, pas une absence de donnée. */}
         <Kpi label="Boires" value={d.kpi.feedCount} />
-        <Kpi label="Temps au sein" value={fmtDur(d.kpi.breastSec || null)} />
-        {/* Durée moyenne : affichée seulement si au moins une durée valide
-            existe. `avgDurationSec` est null sinon — jamais 0, jamais NaN. */}
+        {d.kpi.breastSec > 0 && (
+          <Kpi label="Temps au sein" value={fmtDur(d.kpi.breastSec)} />
+        )}
         {d.kpi.avgDurationSec != null && (
           <Kpi label="Durée moyenne" value={fmtDur(d.kpi.avgDurationSec)} />
         )}
         <Kpi label="Pipis" value={d.kpi.pees} />
         <Kpi label="Selles" value={d.kpi.poops} />
-        <Kpi label="Intervalle moyen" value={fmtInterval(d.kpi.avgIntervalMs)} />
-        <Kpi label="Plus long intervalle" value={fmtInterval(d.kpi.longestIntervalMs)} />
+        {d.kpi.avgIntervalMs != null && (
+          <Kpi label="Intervalle moyen" value={fmtInterval(d.kpi.avgIntervalMs)} />
+        )}
+        {d.kpi.longestIntervalMs != null && (
+          <Kpi label="Plus long intervalle" value={fmtInterval(d.kpi.longestIntervalMs)} />
+        )}
         {/* Quantités : rien du tout si aucune n'a été saisie (allaitement
             exclusif), plutôt qu'une carte à zéro. */}
         {d.kpi.mlCount > 0 && (
@@ -277,7 +285,11 @@ export default function KpiDashboard() {
 
       {/* 9. Complétude des saisies — porte sur les DONNÉES, pas sur l'enfant */}
       <section className="stats-card completeness">
-        <span className="completeness-label">Complétude des saisies (7 j)</span>
+        {/* Vrai titre de section : la carte doit apparaître dans le plan du
+            document et dans la navigation par titres des lecteurs d'écran.
+            Le style de `.completeness-label` neutralise l'apparence par
+            défaut du h2 — le rendu visuel est inchangé. */}
+        <h2 className="completeness-label">Complétude des saisies (7 j)</h2>
         <span className={`completeness-level lvl-${d.completeness.level}`}>
           {COMPLETENESS_LABEL[d.completeness.level]}
         </span>

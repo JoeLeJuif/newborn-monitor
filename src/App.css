@@ -733,8 +733,20 @@ textarea.text-input { resize: vertical; }
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; padding: 12px 16px;
 }
-.completeness-label { font-size: 13px; color: var(--text-muted); }
-.completeness-level { font-size: 14px; font-weight: 700; }
+/* `.completeness-label` porte un h2 : on neutralise la taille, la graisse et
+   les marges par défaut pour conserver exactement l'apparence d'origine. */
+.completeness-label { font-size: 13px; font-weight: 400; margin: 0; color: var(--text-muted); }
+/* `nowrap` : le niveau ne doit jamais être coupé en plein milieu (« Très » /
+   « complet »). Le libellé, lui, peut se replier sur deux lignes. */
+.completeness-level { font-size: 14px; font-weight: 700; white-space: nowrap; }
+
+/* Écrans très étroits : sur 256 px utiles, le libellé et le plus long des
+   niveaux (« Données insuffisantes ») ne peuvent pas tenir côte à côte sur une
+   seule ligne. On resserre donc l'espacement pour compenser le repli du
+   libellé, sans toucher au contenu ni au rendu à partir de 375 px. */
+@media (max-width: 360px) {
+  .completeness { padding: 8px 12px; gap: 8px; }
+}
 .completeness-level.lvl-insufficient { font-weight: 600; color: var(--text-muted); }
 
 /* ── Navigation basse ── */
