@@ -87,3 +87,22 @@ export function resetKpiPrefs() {
   }
   return { ...DEFAULT_KPI_PREFS };
 }
+
+// ── Sprint 4 : transformations pures de la disposition ───────────────────────
+// Le composant ne fait qu'appeler ces fonctions puis persister le résultat :
+// toute la logique reste testable sans moteur de rendu.
+
+// Ajoute ou retire un id d'une liste (renvoie une nouvelle liste).
+export function toggleId(list, id) {
+  const arr = asIdList(list);
+  return arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id];
+}
+
+// Réinitialise UNIQUEMENT la disposition (masquage, ordre, favoris) et CONSERVE
+// la période choisie — le format sépare déjà ces champs, rien n'oblige à
+// réinitialiser la période avec le reste.
+export function resetKpiLayout(prefs) {
+  const next = { ...normalizeKpiPrefs(prefs), hiddenCards: [], order: [], favorites: [] };
+  saveKpiPrefs(next);
+  return next;
+}

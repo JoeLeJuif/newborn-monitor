@@ -717,7 +717,7 @@ textarea.text-input { resize: vertical; }
 
 /* Sélecteur de période : 5 puces compactes qui doivent tenir sur une ligne
    dès 320 px, sans réduire la cible tactile sous 44 px de hauteur. */
-.period-grid { flex-wrap: nowrap; gap: 6px; margin-bottom: 12px; }
+.period-grid { flex-wrap: nowrap; gap: 6px; margin-bottom: 0; flex: 1; min-width: 0; }
 .period-grid .chip-sm {
   flex: 1;
   min-width: 0;
@@ -726,6 +726,96 @@ textarea.text-input { resize: vertical; }
   font-size: 13px;
   white-space: nowrap;
 }
+
+/* ── Barre d'outils KPI : période + accès à la personnalisation ── */
+.kpi-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+/* Bouton discret : ni une carte KPI, ni une action lourde. */
+.btn-customize {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-customize:hover { border-color: var(--primary); color: var(--primary); }
+
+/* Repère favori discret (dashboard). */
+.fav-star { color: var(--pee); margin-right: 4px; font-size: 0.85em; }
+
+/* ── Panneau de personnalisation ── */
+.customize-modal {
+  max-width: 440px;
+  max-height: 85vh;
+  overflow-y: auto;
+  text-align: left;
+}
+.cz-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cz-close {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 10px;
+  background: var(--surface-alt);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+}
+.cz-hint { margin: 6px 0 4px; font-size: 13px; color: var(--text-muted); }
+.cz-saved { margin: 0; min-height: 18px; font-size: 12px; color: var(--feed); font-weight: 600; }
+.cz-blocked { margin: 4px 0 0; font-size: 13px; color: var(--text); background: var(--pee-soft); border-radius: 10px; padding: 8px 12px; }
+
+.cz-group { margin-top: 14px; }
+.cz-group-title { margin: 0 0 6px; font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.cz-list { list-style: none; margin: 0; padding: 0; }
+
+.cz-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.cz-row:last-child { border-bottom: none; }
+.cz-title { flex: 1 1 60%; min-width: 0; font-size: 14px; color: var(--text); }
+.cz-row.cz-hidden .cz-title { color: var(--text-muted); text-decoration: line-through; }
+.cz-fav-dot { color: var(--pee); margin-right: 4px; }
+
+.cz-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.cz-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+}
+.cz-btn-text { font-size: 13px; font-weight: 600; }
+.cz-btn-on { border-color: var(--pee); color: var(--pee); }
+.cz-btn:disabled { opacity: 0.35; cursor: default; }
+.cz-btn:not(:disabled):hover { border-color: var(--primary); }
+
+.cz-footer { margin-top: 16px; }
+.cz-reset { width: 100%; }
+.cz-confirm { display: flex; flex-direction: column; gap: 10px; }
+.cz-confirm span { font-size: 14px; }
+.cz-confirm-actions { display: flex; gap: 10px; }
+.cz-confirm-actions .btn { flex: 1; }
 
 /* Répartition des types de boires : liste compacte, volontairement pas un
    graphique (l'information est un simple comptage). */

@@ -8,11 +8,23 @@
 // et les formateurs vivent ailleurs (KpiDashboard.jsx et lib/kpiFormat.js),
 // pour ne pas casser le rafraîchissement à chaud de React.
 import { useState } from 'react';
-import { visibleTiles } from '../lib/kpiRegistry.js';
+import { dashboardTiles } from '../lib/kpiRegistry.js';
 import { fmtClock, fmtElapsed, fmtDur, fmtInterval, fmtPct, formatTile } from '../lib/kpiFormat.js';
 import { Donut, SplitBar, MetricBars, IntervalBars, Heatmap } from './StatCharts.jsx';
 
 const dayNarrow = (day) => day.date.toLocaleDateString('fr-CA', { weekday: 'narrow' });
+
+// Titre de section partagé : ajoute un repère favori discret (★) sans le
+// mêler au texte accessible du titre (le ★ est décoratif, l'état favori est
+// annoncé dans le panneau de personnalisation).
+function SectionTitle({ title, favorite, className = 'stats-h2' }) {
+  return (
+    <h2 className={className}>
+      {favorite && <span className="fav-star" aria-hidden="true">★</span>}
+      {title}
+    </h2>
+  );
+}
 
 const BREAKDOWN_ROWS = [
   { key: 'left', label: 'Sein gauche' },
@@ -37,14 +49,17 @@ const TREND_METRICS = [
 ];
 
 // ── Briques ─────────────────────────────────────────────────────────────────
-function Tile({ label, value, unit }) {
+function Tile({ label, value, unit, favorite }) {
   return (
     <div className="kpi-card">
       <div className="kpi-value">
         {value}
         {unit && <span className="kpi-unit"> {unit}</span>}
       </div>
-      <div className="kpi-label">{label}</div>
+      <div className="kpi-label">
+        {favorite && <span className="fav-star" aria-hidden="true">★</span>}
+        {label}
+      </div>
     </div>
   );
 }
@@ -65,10 +80,10 @@ function HeadRow({ icon, label, ts, nowMs }) {
 }
 
 // ── Sections ────────────────────────────────────────────────────────────────
-export function LastEventsSection({ d, title, nowMs }) {
+export function LastEventsSection({ d, title, nowMs, favorite }) {
   return (
     <section className="stats-card">
-      <h2 className="stats-h2">{title}</h2>
+      <SectionTitle title={title} favorite={favorite} />
       <HeadRow icon="🍼" label="Dernier boire" ts={d.last.lastFeedTs} nowMs={nowMs} />
       <HeadRow icon="💧" label="Dernier pipi" ts={d.last.lastPeeTs} nowMs={nowMs} />
       <HeadRow icon="💩" label="Dernière selle" ts={d.last.lastPoopTs} nowMs={nowMs} />
@@ -76,26 +91,33 @@ export function LastEventsSection({ d, title, nowMs }) {
   );
 }
 
-// Grille des tuiles : itère sur le registre. Une tuile sans valeur à montrer
-// n'est pas rendue (règle unifiée du Sprint 2.1).
-export function TilesSection({ d, title }) {
+// Grille des tuiles : itère sur le registre avec l'ordre, les favoris et le
+// masquage de l'utilisateur. Une tuile sans valeur à montrer n'est pas rendue
+// (règle unifiée du Sprint 2.1). Si tout est masqué ou sans données, la
+// section entière disparaît plutôt que d'afficher un titre orphelin.
+export function TilesSection({ d, title, favorite, prefs }) {
+  const tiles = dashboardTiles(d, prefs);
+  if (!tiles.length) return null;
+  const favSet = new Set(prefs?.favorites || []);
   return (
     <>
-      <h2 className="stats-h2 stats-sub">{title}</h2>
+      <SectionTitle title={title} favorite={favorite} className="stats-h2 stats-sub" />
       <div className="kpi-grid">
-        {visibleTiles(d).map((t) => {
+        {tiles.map((t) => {
           const { value, unit } = formatTile(t.kind, t.value(d));
-          return <Tile key={t.id} label={t.label} value={value} unit={unit} />;
+          return (
+            <Tile key={t.id} label={t.label} value={value} unit={unit} favorite={favSet.has(t.id)} />
+          );
         })}
       </div>
     </>
   );
 }
 
-export function BreakdownSection({ d, title }) {
+export function BreakdownSection({ d, title, favorite }) {
   return (
     <section className="stats-card">
-      <h2 className="stats-h2">{title}</h2>
+      <SectionTitle title={title} favorite={favorite} />
       <ul className="breakdown">
         {BREAKDOWN_ROWS.filter((r) => d.kpi.breakdown[r.key] > 0).map((r) => (
           <li key={r.key}>
@@ -108,18 +130,20 @@ export function BreakdownSection({ d, title }) {
   );
 }
 
-export function TrendSection({ d, title }) {
+export function TrendSection({ d, title, favorite }) {
   const [metric, setMetric] = useState('feeds');
   const m = TREND_METRICS.find((x) => x.key === metric);
   return (
     <section className="stats-card">
-      <h2 className="stats-h2">{title}</h2>
-      <div className="chip-grid four" role="tablist" aria-label="Métrique">
+      <SectionTitle title={title} favorite={favorite} />
+      {/* Boutons bascule, PAS des onglets : ils choisissent la série tracée
+          sur place. `aria-pressed` reflète l'état sans promettre un tabpanel. */}
+      <div className="chip-grid four" role="group" aria-label="Métrique de la tendance">
         {TREND_METRICS.map((x) => (
           <button
             key={x.key}
-            role="tab"
-            aria-selected={metric === x.key}
+            type="button"
+            aria-pressed={metric === x.key}
             className={`chip ${metric === x.key ? 'chip-active' : ''}`}
             onClick={() => setMetric(x.key)}
           >
@@ -136,10 +160,10 @@ export function TrendSection({ d, title }) {
   );
 }
 
-export function IntervalsSection({ d, title }) {
+export function IntervalsSection({ d, title, favorite }) {
   return (
     <section className="stats-card">
-      <h2 className="stats-h2">{title}</h2>
+      <SectionTitle title={title} favorite={favorite} />
       {d.intervals.length >= 2 ? (
         <>
           <IntervalBars points={d.intervals} formatGap={(ms) => fmtInterval(ms)} />
@@ -156,10 +180,10 @@ export function IntervalsSection({ d, title }) {
   );
 }
 
-export function DayNightSection({ d, title }) {
+export function DayNightSection({ d, title, favorite }) {
   return (
     <section className="stats-card">
-      <h2 className="stats-h2">{title}</h2>
+      <SectionTitle title={title} favorite={favorite} />
       {d.dayNight.total > 0 ? (
         <div className="donut-wrap">
           <div className="donut-box">
@@ -187,10 +211,10 @@ export function DayNightSection({ d, title }) {
   );
 }
 
-export function SideSection({ d, title }) {
+export function SideSection({ d, title, favorite }) {
   return (
     <section className="stats-card">
-      <h2 className="stats-h2">{title}</h2>
+      <SectionTitle title={title} favorite={favorite} />
       {d.side.total > 0 ? (
         <>
           <SplitBar
@@ -215,10 +239,10 @@ export function SideSection({ d, title }) {
   );
 }
 
-export function HourlySection({ d, title }) {
+export function HourlySection({ d, title, favorite }) {
   return (
     <section className="stats-card">
-      <h2 className="stats-h2">{title}</h2>
+      <SectionTitle title={title} favorite={favorite} />
       {d.hourlyTotal > 0 ? (
         <Heatmap hours={d.hourly} />
       ) : (
@@ -228,10 +252,10 @@ export function HourlySection({ d, title }) {
   );
 }
 
-export function InsightsSection({ d, title }) {
+export function InsightsSection({ d, title, favorite }) {
   return (
     <section className="stats-card">
-      <h2 className="stats-h2">{title}</h2>
+      <SectionTitle title={title} favorite={favorite} />
       <ul className="insights">
         {d.insights.map((t, i) => (
           <li key={i}>{t}</li>
@@ -243,10 +267,10 @@ export function InsightsSection({ d, title }) {
 
 // Porte sur les DONNÉES saisies, jamais sur l'enfant. Le h2 est stylé pour
 // rester visuellement discret (cf. .completeness-label).
-export function CompletenessSection({ d, title }) {
+export function CompletenessSection({ d, title, favorite }) {
   return (
     <section className="stats-card completeness">
-      <h2 className="completeness-label">{title}</h2>
+      <SectionTitle title={title} favorite={favorite} className="completeness-label" />
       <span className={`completeness-level lvl-${d.completeness.level}`}>
         {COMPLETENESS_LABEL[d.completeness.level]}
       </span>

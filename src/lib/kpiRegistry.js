@@ -77,3 +77,100 @@ export function visibleTiles(dashboard, hiddenIds = []) {
   const hidden = new Set(hiddenIds);
   return KPI_TILES.filter((t) => !hidden.has(t.id) && t.visible(dashboard));
 }
+
+// ── Sprint 4 : ordre personnalisé et favoris ────────────────────────────────
+//
+// Les tuiles et les sections forment DEUX groupes indépendants : une tuile ne
+// peut jamais devenir une section. Comme leurs ids sont disjoints, un même
+// `order` plat décrit les deux — chaque appel d'`applyOrder` ne retient que les
+// ids de sa liste et ignore le reste.
+//
+// Robustesse aux évolutions du registre :
+//   * un id d'`order` inconnu de la liste est ignoré (KPI retiré d'un sprint) ;
+//   * une entrée du registre absente d'`order` est ajoutée à la fin, dans
+//     l'ordre du registre (un KPI ajouté plus tard apparaît proprement) ;
+//   * dans le groupe, les favoris passent devant, l'ordre relatif restant
+//     celui calculé ci-dessus (partition stable).
+export function applyOrder(entries, order = [], favorites = []) {
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  const seen = new Set();
+  const base = [];
+  for (const id of order) {
+    const e = byId.get(id);
+    if (e && !seen.has(id)) {
+      base.push(e);
+      seen.add(id);
+    }
+  }
+  for (const e of entries) {
+    if (!seen.has(e.id)) {
+      base.push(e);
+      seen.add(e.id);
+    }
+  }
+  const fav = new Set(favorites);
+  return [...base.filter((e) => fav.has(e.id)), ...base.filter((e) => !fav.has(e.id))];
+}
+
+// Ordre affiché d'un groupe, sous forme d'ids.
+export function arrangedIds(entries, order, favorites) {
+  return applyOrder(entries, order, favorites).map((e) => e.id);
+}
+
+// Peut-on déplacer `id` d'un cran (dir = -1 monter, +1 descendre) sans quitter
+// sa bande favori / non-favori ? Sert à désactiver les boutons aux limites.
+export function canMove(entries, order, favorites, id, dir) {
+  const ids = arrangedIds(entries, order, favorites);
+  const i = ids.indexOf(id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= ids.length) return false;
+  const fav = new Set(favorites);
+  return fav.has(ids[i]) === fav.has(ids[j]);
+}
+
+// Nouvel ordre (ids du groupe) après déplacement ; inchangé si impossible.
+// Les échanges ne franchissent jamais la frontière favori/non-favori, donc la
+// séquence renvoyée reste cohérente avec l'affichage favoris-d'abord.
+export function movedGroupOrder(entries, order, favorites, id, dir) {
+  const ids = arrangedIds(entries, order, favorites);
+  if (!canMove(entries, order, favorites, id, dir)) return ids;
+  const i = ids.indexOf(id);
+  const j = i + dir;
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  return ids;
+}
+
+// `order` plat reconstruit pour les deux groupes : chaque groupe est réécrit
+// dans son ordre affiché courant, ce qui fige une disposition non ambiguë.
+export function fullOrder(order, favorites) {
+  return [
+    ...arrangedIds(KPI_TILES, order, favorites),
+    ...arrangedIds(KPI_SECTIONS, order, favorites),
+  ];
+}
+
+// Tous les ids personnalisables (tuiles + sections).
+export const CUSTOMIZABLE_IDS = [...KPI_TILES, ...KPI_SECTIONS].map((e) => e.id);
+
+// Nombre d'éléments NON masqués par l'utilisateur (indépendamment des données).
+// Sert au garde-fou « ne jamais tout masquer ».
+export function visibleCount(hiddenCards = []) {
+  const hidden = new Set(hiddenCards);
+  return CUSTOMIZABLE_IDS.filter((id) => !hidden.has(id)).length;
+}
+
+// Sections finalement rendues : ordre + favoris + masquage + visibilité données.
+export function dashboardSections(dashboard, prefs = {}) {
+  const hidden = new Set(prefs.hiddenCards || []);
+  return applyOrder(KPI_SECTIONS, prefs.order, prefs.favorites).filter(
+    (s) => !hidden.has(s.id) && s.visible(dashboard),
+  );
+}
+
+// Tuiles finalement rendues : même chaîne que les sections.
+export function dashboardTiles(dashboard, prefs = {}) {
+  const hidden = new Set(prefs.hiddenCards || []);
+  return applyOrder(KPI_TILES, prefs.order, prefs.favorites).filter(
+    (t) => !hidden.has(t.id) && t.visible(dashboard),
+  );
+}

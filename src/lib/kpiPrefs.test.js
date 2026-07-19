@@ -9,6 +9,8 @@ import {
   loadKpiPrefs,
   saveKpiPrefs,
   resetKpiPrefs,
+  toggleId,
+  resetKpiLayout,
 } from './kpiPrefs.js';
 
 // localStorage minimal — le projet n'embarque pas d'environnement DOM.
@@ -86,5 +88,36 @@ describe('Sprint 3 — persistance locale', () => {
     expect(() => loadKpiPrefs()).not.toThrow();
     expect(() => saveKpiPrefs(DEFAULT_KPI_PREFS)).not.toThrow();
     expect(loadKpiPrefs().period).toBe(DEFAULT_PERIOD_ID);
+  });
+});
+
+describe('Sprint 4 — transformations de disposition', () => {
+  it('toggleId ajoute puis retire', () => {
+    expect(toggleId([], 'a')).toEqual(['a']);
+    expect(toggleId(['a', 'b'], 'a')).toEqual(['b']);
+    expect(toggleId(['a'], 'b')).toEqual(['a', 'b']);
+  });
+
+  it('toggleId assainit une liste corrompue', () => {
+    expect(toggleId(['a', 2, null, 'b'], 'c')).toEqual(['a', 'b', 'c']);
+    expect(toggleId('pas-un-tableau', 'a')).toEqual(['a']);
+  });
+
+  it('resetKpiLayout efface disposition mais CONSERVE la période', () => {
+    const prefs = { v: 1, period: '30d', hiddenCards: ['x'], order: ['y', 'z'], favorites: ['w'] };
+    const next = resetKpiLayout(prefs);
+    expect(next.period).toBe('30d'); // la période survit
+    expect(next.hiddenCards).toEqual([]);
+    expect(next.order).toEqual([]);
+    expect(next.favorites).toEqual([]);
+  });
+
+  it('resetKpiLayout persiste : la relecture confirme', () => {
+    saveKpiPrefs({ ...DEFAULT_KPI_PREFS, period: '7d', hiddenCards: ['a'], favorites: ['b'] });
+    resetKpiLayout(loadKpiPrefs());
+    const reread = loadKpiPrefs();
+    expect(reread.period).toBe('7d');
+    expect(reread.hiddenCards).toEqual([]);
+    expect(reread.favorites).toEqual([]);
   });
 });
