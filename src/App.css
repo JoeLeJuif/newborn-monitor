@@ -496,6 +496,13 @@ textarea.text-input { resize: vertical; }
   font-weight: 600;
   flex-shrink: 0;
 }
+/* Bannière de tétée groupée dans la timeline : réutilise .event-row, accentuée
+   avec les jetons de couleur « feed » existants (thème clair/sombre gérés). */
+.cluster-banner {
+  background: var(--feed-soft);
+  border-color: var(--feed);
+}
+
 .empty {
   text-align: center;
   color: var(--text-muted);

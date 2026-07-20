@@ -11,6 +11,7 @@
 import { feedTypeMeta } from './constants.js';
 import { eventTime } from './summary.js';
 import { dayKey } from './time.js';
+import { detectClusterFeedings } from './clusterFeeding.js';
 
 const DAY_MS = 86400000;
 
@@ -512,6 +513,15 @@ export function computeDashboard(events, now = Date.now(), options = {}) {
   const periodDays = options.periodDays === undefined ? 1 : options.periodDays;
   const w = resolveWindow(list, now, periodDays);
   const hourly = hourlyActivity(list, w.fromMs, w.toMs);
+  // Tétées groupées sur la MÊME fenêtre que les autres KPI. Le moteur
+  // (clusterFeeding.js) reste inchangé : on lui passe simplement les événements
+  // bornés à la période, il se charge de ne retenir que les boires exploitables.
+  const clusters = detectClusterFeedings(
+    list.filter((e) => {
+      const t = ts(e);
+      return Number.isFinite(t) && t >= w.fromMs && t <= w.toMs;
+    }),
+  );
   return {
     // Fenêtre effectivement appliquée : l'affichage s'en sert pour libeller les
     // titres, afin qu'aucune section ne mente sur la période qu'elle couvre.
@@ -527,5 +537,6 @@ export function computeDashboard(events, now = Date.now(), options = {}) {
     hourlyTotal: hourly.reduce((a, b) => a + b, 0),
     completeness: dataCompleteness(list, w.fromMs, w.toMs),
     insights: computeInsights(list, now),
+    clusters, // tétées groupées détectées sur la période (moteur clusterFeeding)
   };
 }

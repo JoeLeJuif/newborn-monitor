@@ -21,6 +21,7 @@ import KpiCustomize from './KpiCustomize.jsx';
 import {
   LastEventsSection,
   TilesSection,
+  ClustersSection,
   BreakdownSection,
   TrendSection,
   IntervalsSection,
@@ -36,6 +37,7 @@ import {
 const SECTION_COMPONENTS = {
   last: LastEventsSection,
   tiles: TilesSection,
+  clusters: ClustersSection,
   breakdown: BreakdownSection,
   trend: TrendSection,
   intervals: IntervalsSection,

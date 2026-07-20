@@ -1,4 +1,5 @@
 // Historique chronologique de tous les événements, regroupés par jour.
+import { Fragment } from 'react';
 import { useStore } from '../store/useStore.jsx';
 import { sortedByTimeDesc, eventTime } from '../lib/summary.js';
 import {
@@ -12,6 +13,10 @@ import {
   feedTypeMeta,
   amountLabel,
 } from '../lib/constants.js';
+import { detectClusterFeedings } from '../lib/clusterFeeding.js';
+
+// Libellé français du niveau de confiance renvoyé par le moteur.
+const CONFIDENCE_LABEL = { low: 'faible', medium: 'moyenne', high: 'élevée' };
 
 function eventIcon(e) {
   if (e.type === 'feed') return '🍼';
@@ -39,6 +44,17 @@ function eventSummary(e) {
 export default function History({ navigate }) {
   const { events } = useStore();
   const ordered = sortedByTimeDesc(events);
+
+  // Tétées groupées (Lot 1) : détection via le moteur existant (aucune logique
+  // ici). La carte d'un épisode s'affiche au-dessus de ses boires ; comme la
+  // liste est du plus récent au plus ancien, l'ancre est le boire le plus
+  // récent de l'épisode (dernier de cluster.events, trié en ordre croissant).
+  // Les boires restent affichés normalement en dessous (aucun regroupement).
+  const clusterByAnchorId = new Map();
+  for (const c of detectClusterFeedings(events)) {
+    const anchor = c.events[c.events.length - 1];
+    if (anchor && anchor.id != null) clusterByAnchorId.set(anchor.id, c);
+  }
 
   if (ordered.length === 0) {
     return (
@@ -70,7 +86,25 @@ export default function History({ navigate }) {
           <h2 className="day-heading">{g.heading}</h2>
           <ul className="event-list">
             {g.items.map((e) => (
-              <li key={e.id}>
+              <Fragment key={e.id}>
+                {clusterByAnchorId.has(e.id) && (
+                  <li>
+                    <div className="event-row cluster-banner">
+                      <span className="event-icon" aria-hidden="true">🍼</span>
+                      <span className="event-body">
+                        <span className="event-summary">
+                          Tétée groupée · {clusterByAnchorId.get(e.id).feedCount} boires
+                        </span>
+                        <span className="event-note">
+                          {formatTime(clusterByAnchorId.get(e.id).startAt)} →{' '}
+                          {formatTime(clusterByAnchorId.get(e.id).endAt)} · confiance{' '}
+                          {CONFIDENCE_LABEL[clusterByAnchorId.get(e.id).confidence]}
+                        </span>
+                      </span>
+                    </div>
+                  </li>
+                )}
+                <li>
                 <button
                   className="event-row"
                   onClick={() => navigate('event', { id: e.id })}
@@ -84,7 +118,8 @@ export default function History({ navigate }) {
                   </span>
                   <span className="event-time">{formatTime(eventTime(e))}</span>
                 </button>
-              </li>
+                </li>
+              </Fragment>
             ))}
           </ul>
         </div>

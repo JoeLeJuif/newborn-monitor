@@ -114,6 +114,25 @@ export function TilesSection({ d, title, favorite, prefs }) {
   );
 }
 
+// Tétées groupées (cluster feeding) — Lot 1 : simple carte de comptage.
+// Aucune logique de détection ici : d.clusters vient de computeDashboard, qui
+// s'appuie sur le moteur clusterFeeding.js (inchangé).
+export function ClustersSection({ d, title, favorite }) {
+  const clusters = d.clusters || [];
+  // Les épisodes sont triés du plus ancien au plus récent : le dernier du
+  // tableau est donc le plus récent.
+  const last = clusters.length ? clusters[clusters.length - 1] : null;
+  return (
+    <section className="stats-card">
+      <SectionTitle title={title} favorite={favorite} />
+      <div className="kpi-value">{clusters.length}</div>
+      <p className="help-text">
+        {last ? `Dernière : ${fmtClock(last.startAt)}–${fmtClock(last.endAt)}` : 'Aucune'}
+      </p>
+    </section>
+  );
+}
+
 export function BreakdownSection({ d, title, favorite }) {
   return (
     <section className="stats-card">

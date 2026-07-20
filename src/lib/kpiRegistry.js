@@ -49,6 +49,7 @@ export const KPI_SECTIONS = [
   { id: 'last', title: 'Derniers événements', group: 'resume', periodBound: false, visible: () => true },
   { id: 'tiles', title: null, titleOf: (p) => `Sur ${p}`, group: 'resume', periodBound: true, visible: () => true },
   { id: 'breakdown', title: null, titleOf: (p) => `Types de boires (${p})`, group: 'resume', periodBound: true, visible: (d) => d.kpi.feedCount > 0 },
+  { id: 'clusters', title: '🍼 Tétées groupées', group: 'resume', periodBound: true, visible: () => true },
   { id: 'trend', title: 'Tendance sur 7 jours', group: 'graphiques', periodBound: false, visible: () => true },
   { id: 'intervals', title: 'Intervalles entre les boires', group: 'graphiques', periodBound: false, visible: () => true },
   { id: 'dayNight', title: null, titleOf: (p) => `Jour / nuit (${p})`, group: 'graphiques', periodBound: true, visible: () => true },
