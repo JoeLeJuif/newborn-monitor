@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   detectClusterFeedings,
   groupFeedRuns,
+  clusterConfidence,
   CLUSTER_GAP_MINUTES,
   CLUSTER_MIN_FEEDS,
+  CLUSTER_GAP_MODES,
+  DEFAULT_GAP_MODE,
 } from './clusterFeeding.js';
 
 // Base horaire fixe pour des tests déterministes quel que soit le fuseau.
@@ -81,7 +84,7 @@ describe('detectClusterFeedings — seuil', () => {
     expect(out).toEqual([]);
   });
 
-  it("l'écart se mesure FIN → début, pas début → début", () => {
+  it('end-to-start explicite : mesure FIN → début', () => {
     // Deux boires de 20 min de durée, débuts espacés de 60 min :
     // fin du 1er à 20 min, début du 2e à 60 min → écart 40 min ≤ 45.
     const feeds = [
@@ -89,7 +92,7 @@ describe('detectClusterFeedings — seuil', () => {
       feed(60, { durationSec: 20 * 60 }),
       feed(120, { durationSec: 20 * 60 }),
     ];
-    const out = detectClusterFeedings(feeds);
+    const out = detectClusterFeedings(feeds, { gapMode: 'end-to-start' });
     expect(out).toHaveLength(1);
     expect(out[0].feedCount).toBe(3);
   });
@@ -262,5 +265,201 @@ describe('groupFeedRuns', () => {
   it('regroupe sans appliquer le minimum de boires', () => {
     const runs = groupFeedRuns([feed(0), feed(30), feed(200), feed(230)]);
     expect(runs.map((r) => r.length)).toEqual([2, 2]);
+  });
+});
+
+// ── V1.1 : stratégie d'intervalle (gapMode) ─────────────────────────────────
+
+describe('gapMode', () => {
+  it('constantes exposées, défaut start-to-start', () => {
+    expect(CLUSTER_GAP_MODES).toEqual(['start-to-start', 'end-to-start']);
+    expect(DEFAULT_GAP_MODE).toBe('start-to-start');
+  });
+
+  it('start-to-start est le comportement par défaut', () => {
+    // Débuts espacés de 60 min, durée 20 min chacun.
+    // start-to-start : écart 60 min > 45 → aucun cluster.
+    const feeds = [
+      feed(0, { durationSec: 20 * 60 }),
+      feed(60, { durationSec: 20 * 60 }),
+      feed(120, { durationSec: 20 * 60 }),
+    ];
+    expect(detectClusterFeedings(feeds)).toEqual([]);
+    // Explicite start-to-start : identique au défaut.
+    expect(detectClusterFeedings(feeds, { gapMode: 'start-to-start' })).toEqual([]);
+  });
+
+  it('les deux modes produisent un résultat différent sur le même jeu', () => {
+    // Débuts à 0/60/120 min, durée 20 min : start-to-start = 60 min (rupture),
+    // end-to-start = 40 min (regroupé).
+    const feeds = [
+      feed(0, { durationSec: 20 * 60 }),
+      feed(60, { durationSec: 20 * 60 }),
+      feed(120, { durationSec: 20 * 60 }),
+    ];
+    expect(detectClusterFeedings(feeds, { gapMode: 'start-to-start' })).toEqual([]);
+    const ets = detectClusterFeedings(feeds, { gapMode: 'end-to-start' });
+    expect(ets).toHaveLength(1);
+    expect(ets[0].feedCount).toBe(3);
+  });
+
+  it('propriété : end-to-start regroupe au moins autant que start-to-start', () => {
+    // Comme écart_end-to-start = écart_start-to-start − durée_précédent (≥ 0),
+    // dès que start-to-start regroupe deux boires, end-to-start les regroupe
+    // aussi. La divergence ne peut donc aller QUE dans un sens : end-to-start
+    // détecte un cluster que start-to-start coupe (jamais l'inverse).
+    const feeds = [
+      feed(0, { durationSec: 20 * 60 }),
+      feed(60, { durationSec: 20 * 60 }),
+      feed(120, { durationSec: 20 * 60 }),
+    ];
+    const sts = detectClusterFeedings(feeds, { gapMode: 'start-to-start' });
+    const ets = detectClusterFeedings(feeds, { gapMode: 'end-to-start' });
+    expect(sts).toEqual([]); // start-to-start : 60 min > 45 → coupé
+    expect(ets).toHaveLength(1); // end-to-start : 40 min ≤ 45 → regroupé
+  });
+
+  it('seuil exact respecté dans les deux modes', () => {
+    // Durée 0 → fin = début, les deux modes coïncident sur des boires ponctuels.
+    const at45 = [feed(0), feed(45), feed(90)];
+    const at46 = [feed(0), feed(46), feed(92)];
+    for (const mode of CLUSTER_GAP_MODES) {
+      expect(detectClusterFeedings(at45, { gapMode: mode })).toHaveLength(1);
+      expect(detectClusterFeedings(at46, { gapMode: mode })).toEqual([]);
+    }
+  });
+
+  it('end-to-start : seuil exact fin → début', () => {
+    // Durée 30 min ; débuts à 0/75/150 → fin 30, début 75 → écart 45 pile ≤ 45.
+    const at45 = [
+      feed(0, { durationSec: 30 * 60 }),
+      feed(75, { durationSec: 30 * 60 }),
+      feed(150, { durationSec: 30 * 60 }),
+    ];
+    expect(detectClusterFeedings(at45, { gapMode: 'end-to-start' })).toHaveLength(1);
+    // Débuts à 0/76/152 → fin 30, début 76 → écart 46 > 45 → rupture.
+    const at46 = [
+      feed(0, { durationSec: 30 * 60 }),
+      feed(76, { durationSec: 30 * 60 }),
+      feed(152, { durationSec: 30 * 60 }),
+    ];
+    expect(detectClusterFeedings(at46, { gapMode: 'end-to-start' })).toEqual([]);
+  });
+
+  it('gapMode inconnu : repli silencieux sur le défaut', () => {
+    const feeds = [feed(0), feed(30), feed(60)];
+    expect(detectClusterFeedings(feeds, { gapMode: 'bogus' })).toHaveLength(1);
+  });
+});
+
+// ── V1.1 : niveau de confiance ──────────────────────────────────────────────
+
+describe('confidence & reason', () => {
+  it('3 boires → low', () => {
+    const out = detectClusterFeedings([feed(0), feed(30), feed(60)]);
+    expect(out[0].confidence).toBe('low');
+    expect(out[0].feedCount).toBe(3);
+  });
+
+  it('4 boires → medium', () => {
+    const out = detectClusterFeedings([feed(0), feed(30), feed(60), feed(90)]);
+    expect(out[0].confidence).toBe('medium');
+    expect(out[0].feedCount).toBe(4);
+  });
+
+  it('5 boires → high', () => {
+    const out = detectClusterFeedings([feed(0), feed(30), feed(60), feed(90), feed(120)]);
+    expect(out[0].confidence).toBe('high');
+    expect(out[0].feedCount).toBe(5);
+  });
+
+  it('6 boires ou plus → high', () => {
+    const out = detectClusterFeedings([
+      feed(0), feed(30), feed(60), feed(90), feed(120), feed(150),
+    ]);
+    expect(out[0].confidence).toBe('high');
+    expect(out[0].feedCount).toBe(6);
+  });
+
+  it('helper clusterConfidence déterministe', () => {
+    expect(clusterConfidence(1)).toBe('low');
+    expect(clusterConfidence(2)).toBe('low');
+    expect(clusterConfidence(3)).toBe('low');
+    expect(clusterConfidence(4)).toBe('medium');
+    expect(clusterConfidence(5)).toBe('high');
+    expect(clusterConfidence(9)).toBe('high');
+  });
+
+  it('reason court et stable, sans texte clinique', () => {
+    // Boires ponctuels à 0/39/78 min → 3 boires, span 78 min.
+    const out = detectClusterFeedings([feed(0), feed(39), feed(78)]);
+    expect(out[0].reason).toBe('3 boires en 78 min');
+  });
+
+  it('reason reflète feedCount et durée arrondie (4 boires)', () => {
+    // Débuts à 0/32/64/96 min → 4 boires, span 96 min.
+    const out = detectClusterFeedings([feed(0), feed(32), feed(64), feed(96)]);
+    expect(out[0].reason).toBe('4 boires en 96 min');
+  });
+
+  it('reason identique pour un même cluster (stabilité)', () => {
+    const feeds = [feed(0), feed(30), feed(60)];
+    const a = detectClusterFeedings(feeds)[0].reason;
+    const b = detectClusterFeedings(feeds)[0].reason;
+    expect(a).toBe(b);
+  });
+});
+
+// ── V1.1 : rétrocompatibilité ───────────────────────────────────────────────
+
+describe('rétrocompatibilité de la forme de sortie', () => {
+  it('tous les champs v1 sont conservés, aucun renommé', () => {
+    const out = detectClusterFeedings([feed(0), feed(30), feed(60)]);
+    expect(out).toHaveLength(1);
+    const c = out[0];
+    for (const field of [
+      'startAt',
+      'endAt',
+      'duration',
+      'feedCount',
+      'breastMinutes',
+      'bottleMl',
+      'feedTypes',
+      'sidesUsed',
+      'events',
+      'isClusterFeeding',
+    ]) {
+      expect(c).toHaveProperty(field);
+    }
+    // Champs V1.1 ajoutés (superset, pas de rupture).
+    expect(c).toHaveProperty('confidence');
+    expect(c).toHaveProperty('reason');
+  });
+
+  it('les options existantes fonctionnent toujours (défaut start-to-start)', () => {
+    const feeds = [feed(0), feed(30), feed(60)];
+    // gapMinutes
+    expect(detectClusterFeedings(feeds, { gapMinutes: 20 })).toEqual([]);
+    // minFeeds
+    expect(detectClusterFeedings([feed(0), feed(30)], { minFeeds: 2 })).toHaveLength(1);
+    // rules
+    const heavy = (c) => c.bottleMl >= 100;
+    expect(detectClusterFeedings(feeds, { rules: [heavy] })).toEqual([]);
+    // includeInProgress
+    const withInProgress = [feed(0), feed(30), feed(60, { inProgress: true })];
+    expect(detectClusterFeedings(withInProgress)).toEqual([]);
+    expect(detectClusterFeedings(withInProgress, { includeInProgress: true })).toHaveLength(1);
+    // includeSubThreshold
+    const sub = detectClusterFeedings([feed(0), feed(30)], { includeSubThreshold: true });
+    expect(sub).toHaveLength(1);
+    expect(sub[0].isClusterFeeding).toBe(false);
+  });
+
+  it('ne mute jamais les événements sources (V1.1)', () => {
+    const feeds = [feed(0, { durationSec: 600 }), feed(30), feed(60)];
+    const snapshot = JSON.parse(JSON.stringify(feeds));
+    detectClusterFeedings(feeds, { gapMode: 'end-to-start' });
+    detectClusterFeedings(feeds, { gapMode: 'start-to-start' });
+    expect(feeds).toEqual(snapshot);
   });
 });

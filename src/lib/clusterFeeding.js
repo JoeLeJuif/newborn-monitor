@@ -5,16 +5,21 @@
 // événements sources, ne touche ni au stockage, ni à Supabase, ni à la
 // synchronisation, ni à feedingSession.
 //
-// Définition (v1) :
+// Définition :
 //  * les boires sont triés chronologiquement ;
-//  * deux boires appartiennent au même épisode si l'écart entre la FIN de l'un
-//    et le DÉBUT du suivant est ≤ 45 minutes ;
+//  * deux boires appartiennent au même épisode si l'écart entre eux est
+//    ≤ 45 minutes. L'écart se mesure selon `gapMode` :
+//      - "start-to-start" (défaut) : début du suivant − début du précédent ;
+//      - "end-to-start"            : début du suivant − fin du précédent ;
 //  * un écart strictement supérieur au seuil démarre un nouvel épisode ;
 //  * un épisode n'est reconnu comme « tétée groupée » que s'il compte au moins
 //    3 boires.
 //
 // Le seuil (minutes) et le minimum de boires sont des constantes configurables
 // (voir CLUSTER_GAP_MINUTES / CLUSTER_MIN_FEEDS et les options ci-dessous).
+//
+// Chaque cluster porte un niveau de confiance déterministe (`confidence`) et une
+// justification courte (`reason`), pensés pour un affichage direct.
 //
 // Extensibilité : `detectClusterFeedings` accepte un objet d'options avec des
 // valeurs par défaut. De nouvelles règles d'acceptation peuvent être ajoutées
@@ -29,6 +34,10 @@ export const CLUSTER_GAP_MINUTES = 45;
 
 // Nombre minimal de boires pour reconnaître une tétée groupée.
 export const CLUSTER_MIN_FEEDS = 3;
+
+// Stratégie de mesure de l'écart entre deux boires consécutifs.
+export const CLUSTER_GAP_MODES = ['start-to-start', 'end-to-start'];
+export const DEFAULT_GAP_MODE = 'start-to-start';
 
 const MIN_MS = 60000;
 
@@ -55,13 +64,20 @@ function endMs(e) {
   return startMs(e) + (Number.isFinite(d) && d > 0 ? d * 1000 : 0);
 }
 
-// Regroupe les boires exploitables en séquences (« runs ») de boires rapprochés,
-// selon le seuil fin → début. Fonction pure : renvoie des tableaux de références
-// vers les événements d'origine, sans les muter. Chaque séquence est triée par
-// heure de début croissante.
+// Regroupe les boires exploitables en séquences (« runs ») de boires rapprochés.
+// L'écart entre deux boires consécutifs est mesuré selon `gapMode` :
+//   * "start-to-start" (défaut) : début du suivant − début du précédent ;
+//   * "end-to-start"            : début du suivant − fin du précédent.
+// Fonction pure : renvoie des tableaux de références vers les événements
+// d'origine, sans les muter. Chaque séquence est triée par heure de début.
 export function groupFeedRuns(events, options = {}) {
   const gapMinutes = options.gapMinutes ?? CLUSTER_GAP_MINUTES;
   const includeInProgress = options.includeInProgress === true;
+  // Mode inconnu → repli silencieux sur le défaut, pour ne jamais casser un
+  // appelant qui passerait une valeur inattendue.
+  const gapMode = CLUSTER_GAP_MODES.includes(options.gapMode)
+    ? options.gapMode
+    : DEFAULT_GAP_MODE;
   const gapMs = gapMinutes * MIN_MS;
 
   const feeds = (Array.isArray(events) ? events : [])
@@ -76,9 +92,12 @@ export function groupFeedRuns(events, options = {}) {
       continue;
     }
     const prev = current[current.length - 1];
-    // Écart fin → début. Un chevauchement (écart négatif) reste, sans surprise,
-    // sous le seuil et prolonge donc l'épisode courant.
-    const gap = startMs(feed) - endMs(prev);
+    // Un chevauchement (écart négatif) reste, sans surprise, sous le seuil et
+    // prolonge donc l'épisode courant.
+    const gap =
+      gapMode === 'end-to-start'
+        ? startMs(feed) - endMs(prev)
+        : startMs(feed) - startMs(prev);
     if (gap <= gapMs) {
       current.push(feed);
     } else {
@@ -88,6 +107,18 @@ export function groupFeedRuns(events, options = {}) {
   }
   if (current.length) runs.push(current);
   return runs;
+}
+
+// Niveau de confiance déterministe, fonction du seul nombre de boires :
+//   * 5 boires ou plus → "high" ;
+//   * 4 boires        → "medium" ;
+//   * sinon (3 ou moins) → "low".
+// Avec les réglages par défaut (minFeeds = 3), un cluster reconnu obtient donc
+// exactement low / medium / high selon 3 / 4 / 5+.
+export function clusterConfidence(feedCount) {
+  if (feedCount >= 5) return 'high';
+  if (feedCount === 4) return 'medium';
+  return 'low';
 }
 
 // Résume une séquence de boires en un objet « cluster ». `isClusterFeeding` est
@@ -118,17 +149,25 @@ function summarizeRun(run, isClusterFeeding) {
     }
   }
 
+  const durationMin = (end - start) / MIN_MS;
+  const feedCount = run.length;
+
   return {
     startAt: new Date(start).toISOString(), // début du premier boire (ISO)
     endAt: new Date(end).toISOString(), // fin du dernier boire (ISO)
-    duration: (end - start) / MIN_MS, // durée totale de l'épisode (minutes)
-    feedCount: run.length,
+    duration: durationMin, // durée totale de l'épisode (minutes)
+    feedCount,
     breastMinutes: breastSec / 60, // temps total au sein (minutes)
     bottleMl, // volume total au biberon (ml)
     feedTypes, // types de boire distincts, dans l'ordre d'apparition
     sidesUsed, // côtés distincts utilisés ('left' | 'right' | 'both')
     events: run, // références aux événements sources (jamais mutés)
     isClusterFeeding,
+    // Niveau de confiance ('low' | 'medium' | 'high') selon le nombre de boires.
+    confidence: clusterConfidence(feedCount),
+    // Justification courte, stable et directement affichable (aucun texte
+    // clinique ni diagnostic). Ex. « 3 boires en 78 min ».
+    reason: `${feedCount} boire${feedCount > 1 ? 's' : ''} en ${Math.round(durationMin)} min`,
   };
 }
 
@@ -136,7 +175,9 @@ function summarizeRun(run, isClusterFeeding) {
 // triées chronologiquement.
 //
 // options :
-//   * gapMinutes        — seuil fin → début en minutes (défaut CLUSTER_GAP_MINUTES) ;
+//   * gapMinutes        — seuil d'écart en minutes (défaut CLUSTER_GAP_MINUTES) ;
+//   * gapMode           — "start-to-start" (défaut) | "end-to-start" : façon de
+//                         mesurer l'écart entre deux boires consécutifs ;
 //   * minFeeds          — nombre minimal de boires (défaut CLUSTER_MIN_FEEDS) ;
 //   * includeInProgress — inclure les boires en cours (défaut false) ;
 //   * rules             — règles d'acceptation additionnelles : tableau de
